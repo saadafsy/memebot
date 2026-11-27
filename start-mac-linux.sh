@@ -10,5 +10,5 @@ if [ ! -d .venv ]; then
 fi
 [ -f .env ] || cp .env.example .env
 .venv/bin/python -m memebot init --data data
-echo "Panel: http://127.0.0.1:8787   (Ctrl+C to stop)"
+echo "Starting memebot. The panel address is printed below (default http://127.0.0.1:8787). Ctrl+C stops it."
 exec .venv/bin/python -m memebot run --data data

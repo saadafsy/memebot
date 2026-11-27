@@ -13,6 +13,6 @@ if not exist .venv (
 if not exist .env copy .env.example .env >nul
 .venv\Scripts\python -m memebot init --data data
 echo.
-echo Panel: http://127.0.0.1:8787   (Ctrl+C to stop)
+echo Starting memebot. The panel address is printed below (default http://127.0.0.1:8787). Ctrl+C stops it.
 .venv\Scripts\python -m memebot run --data data
 pause
