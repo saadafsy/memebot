@@ -107,15 +107,13 @@ async def _check(data: Path) -> int:
             print(f"DexScreener: FAILED {e}")
         sol_usd = await j.usd_price(SOL_MINT)
         print(f"Jupiter price: {'OK $%.2f' % sol_usd if sol_usd else 'FAILED'}")
-        if env.jupiter_api_key:
-            try:
-                o = await j.order(SOL_MINT, usdc, 10_000_000)
-                print(f"Jupiter Swap V2 quote: OK 0.01 SOL -> {o.out_amount/1e6:.4f} USDC, impact {o.price_impact_pct:.4f}%")
-            except FetchError as e:
-                ok = False
-                print(f"Jupiter Swap V2 quote: FAILED {e}")
-        else:
-            print("Jupiter Swap V2 quote: skipped (JUPITER_API_KEY not set; needed for SHEET and LIVE)")
+        try:
+            o = await j.order(SOL_MINT, usdc, 10_000_000)
+            print(f"Jupiter Swap V2 quote: OK 0.01 SOL -> {o.out_amount/1e6:.4f} USDC, impact {o.price_impact_pct:.4f}%"
+                  + ("" if env.jupiter_api_key else " (keyless, rate-limited; set JUPITER_API_KEY for LIVE)"))
+        except FetchError as e:
+            ok = False
+            print(f"Jupiter Swap V2 quote: FAILED {e}")
         rc = await m.creator_history(usdc)
         print(f"RugCheck: {'OK' if rc != 'blind' else 'FAILED/blind'} ({rc[:60]})")
     return 0 if ok else 1
@@ -129,9 +127,6 @@ async def _fees(data: Path) -> int:
     env = load_env()
     cfg = load_settings(data / "settings.json")
     rows = DataDir(data).read_csv(data / "watchlist.csv")
-    if not env.jupiter_api_key:
-        print("Set JUPITER_API_KEY (free at portal.jup.ag) to measure fees with Swap V2 quotes.")
-        return 2
     async with make_client() as c:
         j = Jupiter(c, env.jupiter_api_key, env.jupiter_base)
         sol = await j.usd_price(SOL_MINT)
@@ -142,6 +137,7 @@ async def _fees(data: Path) -> int:
         print(f"Round trip of ${cfg['position_size_usd']} via Jupiter quotes (no trade). settings fee: ${cfg['roundtrip_fee_usd']}")
         for r in rows:
             mint = (r.get("address") or "").strip()
+            await asyncio.sleep(2.2)  # keyless Jupiter allows about 0.5 requests per second
             try:
                 b = await j.order(SOL_MINT, mint, lamports)
                 s = await j.order(mint, SOL_MINT, b.out_amount)

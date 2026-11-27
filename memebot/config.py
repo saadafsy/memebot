@@ -55,6 +55,9 @@ OPTIONAL_KEYS: dict[str, tuple[Any, type, float, float]] = {
     "live_quote_mint": ("So11111111111111111111111111111111111111112", str, 0, 0),
     "pumpfun_audit": (True, bool, 0, 0),
     "live_requires_paper_target": (True, bool, 0, 0),
+    "paper_fee_mode": ("flat", str, 0, 0),
+    "network_fee_sol_per_swap": (0.0002, float, 0, 1),
+    "token_account_rent_sol": (0.00204, float, 0, 1),
 }
 
 
@@ -132,6 +135,8 @@ def load_settings(path: str | Path) -> Settings:
                             "(on Windows run: pip install tzdata)") from None
     if vals["live_quote_mint"] != "So11111111111111111111111111111111111111112":
         raise SettingsError("live_quote_mint must be SOL (So111...112): fees, the SOL reserve and P/L are computed in SOL")
+    if vals["paper_fee_mode"] not in ("flat", "quoted"):
+        raise SettingsError("paper_fee_mode must be 'flat' (roundtrip_fee_usd) or 'quoted' (real Jupiter quotes)")
     if vals["creator_check"] not in ("rugcheck", "off"):
         raise SettingsError("creator_check must be 'rugcheck' or 'off'")
     return Settings(raw=raw, sha256=digest, path=p, values=vals)

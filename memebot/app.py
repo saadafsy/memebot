@@ -84,9 +84,9 @@ def build(data_dir: str | Path, env: Env | None = None, client=None) -> Bot:
     outbox = Outbox()
     paper_notify = Notifier(data, cfg["lane"], outbox, tag="PAPER")
     record_settings_hash(data, cfg, paper_notify)
-    engines = [Engine(cfg, data, market, SimExecutor(cfg), paper_notify, label="PAPER")]
-    extra = []
     jup = Jupiter(client, env.jupiter_api_key, env.jupiter_base)
+    engines = [Engine(cfg, data, market, SimExecutor(cfg, jup), paper_notify, label="PAPER")]
+    extra = []
     if cfg.mode == "SHEET":
         sd = DataDir(data.root / "sheet", inputs_from=data.root)
         extra.append(sd)

@@ -288,7 +288,7 @@ class Engine:
             net = gross - fees
         else:
             gross = cfg["position_size_usd"] * (exit_price / pos["entry"] - 1.0)
-            net = gross - cfg["roundtrip_fee_usd"]
+            net = gross - float(pos.get("paper_fee_usd") or cfg["roundtrip_fee_usd"])
         row = {
             "name": pos["name"], "address": pos["address"], "opened": pos["opened"], "entry": pos["entry"],
             "tp": pos["tp"], "sl": pos["sl"], "liq_at_entry": pos.get("liq_at_entry", ""),
@@ -534,6 +534,8 @@ class Engine:
             "high_since_entry": entry, "low_since_entry": entry, "last_price": live["price"],
             "mode": self.mode,
         }
+        if self.mode == "SIM" and res.fee_usd > 0:
+            pos["paper_fee_usd"] = round(res.fee_usd, 4)  # paper_fee_mode "quoted"
         if self.mode == "LIVE":
             pos.update({"buy_tx_sig": res.tx_sig, "tokens_received": res.tokens_received,
                         "tokens_raw": res.tokens_raw, "entry_fee_usd": res.fee_usd, "usd_spent": res.usd_spent,

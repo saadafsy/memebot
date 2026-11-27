@@ -66,7 +66,7 @@ class FakeJup:
         usd = amount / 1e6 * 0.01 * self.rt_keep
         return Order("req-sell", amount, int(usd / 200 * 1e9), self.impact, tx, slippage_bps, {"outputMint": out})
 
-    async def execute(self, signed, request_id):
+    async def execute(self, signed, request_id, last_valid_block_height=None):
         if self.exec_raises:
             raise FetchError("jupiter execute: network error")
         self.executed.append(request_id)

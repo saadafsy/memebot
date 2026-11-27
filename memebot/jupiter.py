@@ -31,6 +31,16 @@ class Order:
     slippage_bps: int | None
     raw: dict
 
+    @property
+    def fee_bps(self) -> int:
+        return _int(self.raw.get("feeBps")) or 0
+
+    @property
+    def network_fee_lamports(self) -> int:
+        """Signature + priority + rent fees Jupiter quoted for this swap (0 when no taker was given)."""
+        return sum(_int(self.raw.get(k)) or 0 for k in ("signatureFeeLamports", "prioritizationFeeLamports",
+                                                         "rentFeeLamports"))
+
 
 def _int(x: Any) -> int | None:
     try:
@@ -57,9 +67,12 @@ def price_impact_percent(d: dict) -> float | None:
     return None
 
 
-def parse_order(d: Any) -> Order:
+def parse_order(d: Any, taker_set: bool = False) -> Order:
     if not isinstance(d, dict):
         raise FetchError("jupiter order: unexpected response")
+    if taker_set and not d.get("transaction"):
+        raise FetchError(f"jupiter order: no transaction for this wallet "
+                         f"({d.get('errorCode')}: {d.get('errorMessage') or d.get('error') or 'not built'})")
     if d.get("errorCode") or d.get("errorMessage") or d.get("error"):
         raise FetchError(f"jupiter order: {d.get('errorMessage') or d.get('error') or d.get('errorCode')}")
     rid = d.get("requestId") or ""
@@ -91,8 +104,9 @@ def parse_execute(d: Any) -> ExecResult:
     sig = str(d.get("signature") or "")
     ina = _int(d.get("inputAmountResult", d.get("totalInputAmount")))
     outa = _int(d.get("outputAmountResult", d.get("totalOutputAmount")))
-    ok = status == "success" and bool(sig) and bool(outa)
-    err = None if ok else str(d.get("error") or d.get("code") or f"status={d.get('status')}")
+    code = d.get("code", 0)
+    ok = status == "success" and bool(sig) and bool(outa) and code in (0, "0", None)
+    err = None if ok else f"{d.get('error') or 'failed'} (status={d.get('status')}, code={code})"
     return ExecResult(ok, sig, ina, outa, err, d)
 
 
@@ -118,44 +132,63 @@ class Jupiter:
             params["slippageBps"] = str(int(slippage_bps))
         d = await request_json(self.client, "GET", f"{self.base}/order", params=params,
                                headers=self._headers(), label="jupiter order", retries=2)
-        return parse_order(d)
+        return parse_order(d, taker_set=bool(taker))
 
-    async def execute(self, signed_tx_b64: str, request_id: str) -> ExecResult:
+    async def execute(self, signed_tx_b64: str, request_id: str, last_valid_block_height: Any = None) -> ExecResult:
         # Never retry /execute blindly at the HTTP layer: a timeout may still have landed on-chain.
-        d = await request_json(self.client, "POST", f"{self.base}/execute",
-                               json_body={"signedTransaction": signed_tx_b64, "requestId": request_id},
+        body = {"signedTransaction": signed_tx_b64, "requestId": request_id}
+        if last_valid_block_height not in (None, ""):
+            body["lastValidBlockHeight"] = str(last_valid_block_height)
+        d = await request_json(self.client, "POST", f"{self.base}/execute", json_body=body,
                                headers=self._headers(), label="jupiter execute", retries=0)
         return parse_execute(d)
+
+    async def _get(self, path: str, params: dict, label: str) -> Any:
+        last: FetchError | None = None
+        for base in ("https://api.jup.ag", LITE):  # lite-api is being phased out; keep it as a fallback
+            try:
+                return await request_json(self.client, "GET", f"{base}{path}", params=params,
+                                          headers=self._headers() if base != LITE else {}, label=label, retries=2)
+            except FetchError as e:
+                last = e
+        raise last or FetchError(label)
+
+    async def _price_entry(self, mint: str) -> dict | None:
+        try:
+            d = await self._get("/price/v3", {"ids": mint}, "jupiter price")
+        except FetchError as e:
+            log.info("%s", e)
+            return None
+        e = d.get(mint) if isinstance(d, dict) else None
+        return e if isinstance(e, dict) else None
 
     async def decimals(self, mint: str) -> int | None:
         if mint in self._decimals:
             return self._decimals[mint]
         try:
-            d = await request_json(self.client, "GET", f"{LITE}/tokens/v2/search", params={"query": mint},
-                                   label="jupiter tokens", retries=2)
+            d = await self._get("/tokens/v2/search", {"query": mint}, "jupiter tokens")
         except FetchError as e:
             log.info("%s", e)
-            return None
+            d = []
         for t in d if isinstance(d, list) else []:
             if isinstance(t, dict) and (t.get("id") or t.get("address")) == mint:
                 dec = _int(t.get("decimals"))
                 if dec is not None and 0 <= dec <= 18:
                     self._decimals[mint] = dec
                     return dec
+        pe = await self._price_entry(mint)  # the price API also carries decimals
+        dec = _int((pe or {}).get("decimals"))
+        if dec is not None and 0 <= dec <= 18:
+            self._decimals[mint] = dec
+            return dec
         return None
 
     async def usd_price(self, mint: str) -> float | None:
-        base = "https://api.jup.ag" if self.api_key else LITE
+        pe = await self._price_entry(mint)
         try:
-            d = await request_json(self.client, "GET", f"{base}/price/v3", params={"ids": mint},
-                                   headers=self._headers(), label="jupiter price", retries=2)
-        except FetchError as e:
-            log.info("%s", e)
+            v = float((pe or {}).get("usdPrice"))
+        except (TypeError, ValueError):
             return self._last_usd.get(mint)  # last good price (or None) beats blocking an exit
-        try:
-            v = float((d.get(mint) or {}).get("usdPrice"))
-        except (TypeError, ValueError, AttributeError):
-            return self._last_usd.get(mint)
         if math.isfinite(v) and v > 0:
             self._last_usd[mint] = v
             return v

@@ -6,7 +6,7 @@ strategy rules (from his `sim-bot`) with three modes behind one switch in `setti
 | Mode | What it does | Needs |
 |---|---|---|
 | **SIM** (default) | Paper trading only. Same rules, same files and the same P/L math as `bot.py`. | nothing |
-| **SHEET** | Paper trading, plus a print-only **trade sheet** for each signal: a Jupiter quote both ways, all safety checks, and a link. You sign it yourself in Jupiter. The bot never holds a key. | `JUPITER_API_KEY` |
+| **SHEET** | Paper trading, plus a print-only **trade sheet** for each signal: a Jupiter quote both ways, all safety checks, and a link. You sign it yourself in Jupiter. The bot never holds a key. | nothing (a free `JUPITER_API_KEY` raises Jupiter's rate limit) |
 | **LIVE** | Paper trading keeps running as a shadow, **plus** a separate real-money book that signs Jupiter Swap V2 trades with your wallet key. Real entries start **OFF**, and each real buy waits for your **Approve** tap in Telegram or the panel. | key, Jupiter key, RPC, acknowledgement (see below) |
 
 > **Read this first.** Jawad's own backtest of these rules lost money: 100 trades, 8 wins,
@@ -22,7 +22,7 @@ strategy rules (from his `sim-bot`) with three modes behind one switch in `setti
 memebot/            the bot (engine, executors, Telegram bot, web panel + PWA)
 config/settings.json  Jawad's settings, byte-identical (sha256 b9f69186...)
 legacy/             Jawad's original files, untouched, plus a runner for his test_bot.py
-tests/              92 automated tests (pytest)
+tests/              95 automated tests (pytest)
 deploy/             systemd unit for an always-on Linux box
 Dockerfile, docker-compose.yml
 start-windows.bat, start-mac-linux.sh
@@ -125,7 +125,8 @@ Nothing real can happen unless **all** of these are true at startup:
    read -rs MEMEBOT_PRIVATE_KEY && export MEMEBOT_PRIVATE_KEY
    .venv/bin/python -m memebot run --data data
    ```
-3. `JUPITER_API_KEY` (free at portal.jup.ag) and `SOLANA_RPC_URL` (these can go in `.env`).
+3. `JUPITER_API_KEY` (free at portal.jup.ag; keyless access is limited to about 0.5 requests a second,
+   too slow to rely on for exits) and `SOLANA_RPC_URL` (these two can go in `.env`).
 4. `MEMEBOT_LIVE_ACK=I UNDERSTAND THIS TRADES REAL MONEY`.
 
 If any is missing, the bot **refuses to start** in LIVE and says what is missing. Once armed:
@@ -148,6 +149,24 @@ loud **MANUAL ACTION NEEDED** alert. Buy/sell signatures, actual fills and fees 
 `data/live/trades.csv` (his 23 columns plus `mode, buy_tx_sig, sell_tx_sig, actual_entry_price, ...`).
 
 Start with the smallest possible `position_size_usd` and watch the first trades on Solscan.
+
+## Is the $1.80 fee real? (measured Nov 27, 2026)
+
+No, it is about 2 to 4 times too high for coins that pass these rules. A helper session measured a
+$20 round trip (buy, then sell the exact amount received) with live Jupiter Swap V2 quotes on 10 real
+Solana memecoins with $21k to $300k liquidity:
+
+* quoted round-trip cost **$0.15 to $0.61 (0.7% to 3.0%)**, average $0.40 (2.0%). This already includes
+  the pool fees, Jupiter's 0.1% fee each way and price impact;
+* plus network fees of about $0.0004 per signature and up to about $0.07 priority fee per swap, and about
+  $0.15 one-time rent for the token account on the first buy of a coin;
+* realistic all-in: **about $0.45 to $0.90 per $20 round trip (2% to 4.5%)**, before slippage and price
+  movement during a real trade, which can be large in fast pumps and dumps.
+
+So the flat $1.80 (9%) makes paper results look worse than reality would, but it is a defensible safety
+buffer. Leave it, or set `"paper_fee_mode": "quoted"` to book each paper trade's cost from real quotes at
+entry. `python -m memebot fees --data data` measures it for the coins in your watchlist. Even with
+realistic fees, Jawad's backtest is still -$17.71 before any fee, so the fee is not what makes it lose.
 
 ## Settings
 
@@ -177,6 +196,9 @@ Optional keys this version adds (all have defaults; add them only to change them
 | `live_sell_max_failures` | 5 | then MANUAL ACTION NEEDED |
 | `pumpfun_audit` | true | record the pump.fun price as an audit field |
 | `live_requires_paper_target` | true | real entries can't be turned on until paper has `target_closed_trades` closed |
+| `paper_fee_mode` | `flat` | `flat` = `roundtrip_fee_usd` per trade (Jawad's rule); `quoted` = real Jupiter round-trip quote at entry |
+| `network_fee_sol_per_swap` | 0.0002 | used by `quoted` |
+| `token_account_rent_sol` | 0.00204 | used by `quoted` |
 
 ## Fixes compared with bot.py
 
@@ -197,7 +219,7 @@ Optional keys this version adds (all have defaults; add them only to change them
 
 ```bash
 pip install -r requirements-dev.txt
-python -m pytest -q                  # 92 tests
+python -m pytest -q                  # 95 tests
 python legacy/run_legacy_tests.py    # Jawad's original 14 tests against his original bot.py
 ```
 
@@ -221,6 +243,16 @@ The bot only trades while it runs. For 24/7 use either:
   container can't write `./data`, run `sudo chown -R 10001 data`.
 * **Linux server**: copy to `/opt/memebot`, create `.venv`, then use `deploy/memebot.service`.
 * **Windows PC**: Task Scheduler → "At log on" → run `start-windows.bat`, and set the PC never to sleep.
+
+## Verified against live data
+
+A separate read-only session (no wallet, no keys, quotes only) checked this code against the live APIs
+and their docs on Nov 27, 2026: Jupiter Swap V2 `/order` and `/execute` field names (price impact is
+read correctly in both its percent and fraction forms), Jupiter price and token APIs, DexScreener batch
+prices (30 per call, 53 of 53 real coins priced, base-token filter correct) and RugCheck reports (it
+flagged a real coin for "Creator history of rugged tokens", so that coin would be blocked in LIVE).
+Not tested for real: signing and sending a transaction (no money was spent, by Jawad's choice) and
+Telegram message delivery (the build machine can't reach Telegram). Do those yourself on tiny amounts.
 
 ## Research this is based on
 

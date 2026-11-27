@@ -66,15 +66,38 @@ class BuyContext:
 
 
 class SimExecutor:
+    """Paper fills at the DexScreener price. paper_fee_mode 'flat' books Jawad's roundtrip_fee_usd;
+    'quoted' books the real round-trip cost from Jupiter quotes at entry (both directions, which
+    includes pool fees, Jupiter's fee and price impact) plus network fees and token-account rent."""
     mode = "SIM"
 
-    def __init__(self, cfg):
+    def __init__(self, cfg, jup: Jupiter | None = None):
         self.cfg = cfg
+        self.jup = jup
+
+    async def quoted_roundtrip_usd(self, mint: str) -> float | None:
+        if self.jup is None:
+            return None
+        cfg = self.cfg
+        sol = await self.jup.usd_price(SOL_MINT)
+        if not sol:
+            return None
+        lamports = int(cfg["position_size_usd"] / sol * 1e9)
+        try:
+            b = await self.jup.order(SOL_MINT, mint, lamports)
+            s = await self.jup.order(mint, SOL_MINT, b.out_amount)
+        except FetchError:
+            return None
+        network = 2 * cfg["network_fee_sol_per_swap"] + cfg["token_account_rent_sol"]
+        return (b.in_amount - s.out_amount) / 1e9 * sol + network * sol
 
     async def buy(self, ctx: BuyContext) -> BuyResult:
         p = ctx.live["price"]
+        fee = 0.0
+        if self.cfg["paper_fee_mode"] == "quoted":
+            fee = await self.quoted_roundtrip_usd(ctx.mint) or 0.0  # 0 -> falls back to the flat fee
         return BuyResult(ok=True, fill_price=p, tokens_received=self.cfg["position_size_usd"] / p,
-                         usd_spent=self.cfg["position_size_usd"])
+                         usd_spent=self.cfg["position_size_usd"], fee_usd=fee)
 
     async def sell(self, pos: dict, ref_price: float, reason: str) -> SellResult:
         return SellResult(ok=True, fill_price=ref_price,
@@ -182,7 +205,7 @@ class LiveExecutor(_QuotingExecutor):
                            "request_id": order.request_id, "in_raw": order.in_amount,
                            "expected_out_raw": order.out_amount})
         try:
-            res = await self.jup.execute(signed, order.request_id)
+            res = await self.jup.execute(signed, order.request_id, order.raw.get("lastValidBlockHeight"))
         except FetchError as e:
             # Unknown outcome: the journal entry stays 'sent' and the engine checks the wallet every tick.
             log.error("execute %s %s: %s (outcome unknown, checking the wallet)", side, name, e)

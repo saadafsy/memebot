@@ -166,3 +166,43 @@ def test_9_env_example_has_no_inline_comments():
     for line in (ROOT / ".env.example").read_text().splitlines():
         if line and not line.startswith("#"):
             assert "#" not in line.split("=", 1)[1], line
+
+
+# ------------------------------------------------------------------ helper session's live-API findings
+def test_order_with_taker_requires_transaction():
+    from memebot.jupiter import parse_order
+    d = {"requestId": "r", "inAmount": "1", "outAmount": "2", "priceImpact": -0.1, "transaction": "",
+         "errorCode": 2, "errorMessage": "insufficient SOL for gas"}
+    with pytest.raises(FetchError, match="insufficient SOL"):
+        parse_order(d, taker_set=True)
+    quote_only = {k: v for k, v in d.items() if not k.startswith("error")}
+    assert parse_order(quote_only, taker_set=False).transaction is None
+    o = parse_order(dict(quote_only, transaction="AAA", feeBps=10, signatureFeeLamports=5000,
+                         prioritizationFeeLamports=1000, rentFeeLamports=2039280), taker_set=True)
+    assert o.fee_bps == 10 and o.network_fee_lamports == 2045280
+
+
+def test_execute_requires_code_zero():
+    from memebot.jupiter import parse_execute
+    base = {"status": "Success", "signature": "s", "outputAmountResult": "5"}
+    assert parse_execute(dict(base, code=0)).ok
+    r = parse_execute(dict(base, code=-1005, error="expired"))
+    assert not r.ok and "-1005" in r.error
+
+
+async def test_quoted_paper_fee_is_booked(cfg, data, market, notifier):
+    from memebot.engine import Engine
+    from memebot.executors import SimExecutor
+    cfg.values["paper_fee_mode"] = "quoted"
+    jup = FakeJup(rt_keep=0.98)  # 2% round-trip loss on $20 = $0.40, plus network + rent
+    e = Engine(cfg, data, market, SimExecutor(cfg, jup), notifier)
+    write_watch(data, [row("A", price="0.01")], {"A": "ENTRY OK"})
+    market.set("A", 0.01)
+    await e.tick(force_scan=True)
+    fee = e.state["open"][0]["paper_fee_usd"]
+    assert fee == pytest.approx(0.40 + (2 * 0.0002 + 0.00204) * 200, abs=0.01)
+    market.set("A", 0.0131)
+    await e.tick()
+    t = data.read_csv(data.trades_path)[0]
+    assert float(t["net_pnl"]) == pytest.approx(float(t["gross_pnl"]) - fee, abs=0.01)
+    assert len(t) == 23  # Jawad's 23 columns unchanged
