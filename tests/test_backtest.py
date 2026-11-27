@@ -123,3 +123,26 @@ def test_dead_pool_exit_is_haircut_and_tiered_pumpswap_fee():
     noise = rng.normal(0, 1, 300)
     assert deflated_sharpe(noise, 27_000, 0.01) < 0.5  # zero edge after 27,000 tries is not significant
     assert deflated_sharpe(noise + 1.0, 27_000, 0.01) > 0.95
+
+
+def test_pumpportal_join_and_boost_filter(tmp_path):
+    import json as _j
+    from research.backtest import load_pools
+    from research.strategies import boost_filtered
+    d = tmp_path / "d"
+    (d / "ohlcv").mkdir(parents=True)
+    pp = tmp_path / "pp"
+    pp.mkdir()
+    (d / "pools.jsonl").write_text(_j.dumps({"pool": "P1", "base_mint": "M1", "dex": "pumpswap",
+                                             "created_at": "2026-11-27T22:00:00Z"}) + "\n")
+    rows = [[1795816800 + 60 * i, 1, 1, 1, 1, 10] for i in range(20)]
+    (d / "ohlcv" / "P1.json").write_text(_j.dumps(rows))
+    (pp / "events-2026112722.jsonl").write_text("\n".join([
+        _j.dumps({"message": "subscribed"}),
+        _j.dumps({"txType": "create", "mint": "M1", "solAmount": "0.3", "recv_ts": "1795816000"}),
+        _j.dumps({"txType": "migrate", "mint": "M1", "recv_ts": "1795816790"})]))
+    p = load_pools(d, pp_dir=pp)[0]
+    assert p.meta["pp_creator_sol"] == 0.3 and p.meta["pp_secs_to_migrate"] == 790
+    assert boost_filtered(600, 0.5).fn(p) == 0          # organic-looking graduate: enter
+    assert boost_filtered(600, 0.2).fn(p) is None       # creator bought too much
+    assert boost_filtered(1000, 2.0).fn(p) is None      # graduated too fast

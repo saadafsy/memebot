@@ -32,9 +32,9 @@ N_BLOCKS = 8
 _POOLS = None
 
 
-def _init(data_dir: str, min_candles: int, dex: str = ""):
+def _init(data_dir: str, min_candles: int, dex: str = "", pp: str = ""):
     global _POOLS
-    _POOLS = _filter(load_pools(data_dir, min_candles), dex)
+    _POOLS = _filter(load_pools(data_dir, min_candles, pp or None), dex)
 
 
 def _filter(pools, dex: str):
@@ -96,10 +96,11 @@ def main(argv=None) -> int:
     ap.add_argument("--min-test", type=int, default=30)
     ap.add_argument("--top", type=int, default=25)
     ap.add_argument("--workers", type=int, default=os.cpu_count() or 2)
+    ap.add_argument("--pp", default="", help="PumpPortal recorder dir (events-*.jsonl) for launch features")
     ap.add_argument("--dex", default="", help="only these venues, e.g. pumpswap or pump-fun,meteora-dbc")
     a = ap.parse_args(argv)
     t0 = time.time()
-    pools = _filter(load_pools(a.data, a.min_candles), a.dex)
+    pools = _filter(load_pools(a.data, a.min_candles, a.pp or None), a.dex)
     from collections import Counter
     print("venues:", dict(Counter(p.dex for p in pools)), flush=True)
     out = Path(a.out)
@@ -107,7 +108,7 @@ def main(argv=None) -> int:
     E, X = entries(), exits()
     print(f"{len(pools)} pools, {len(E)} entries x {len(X)} exits = {len(E) * len(X)} strategies", flush=True)
     rows = []
-    with ProcessPoolExecutor(a.workers, initializer=_init, initargs=(a.data, a.min_candles, a.dex)) as ex:
+    with ProcessPoolExecutor(a.workers, initializer=_init, initargs=(a.data, a.min_candles, a.dex, a.pp)) as ex:
         for r in ex.map(_run_entry, range(len(E))):
             rows.extend(r)
     table = []
@@ -172,6 +173,7 @@ def main(argv=None) -> int:
                          "trading, never proof of an edge") if span_h < 24 else "full run",
                "data_span_hours": round(span_h, 2), "variants_tested": len(table),
                "dead_pools": sum(1 for p in pools if p.meta.get("dead_end")),
+               "pools_with_pumpportal_launch_data": sum(1 for p in pools if p.meta.get("pp_creator_sol") is not None),
                "venues": dict(_C(p.dex for p in pools)), "dex_filter": a.dex, "pools": len(pools), "train_pools": int(len(pools) * 0.6), "strategies": len(table),
                "candidates_considered": len(cands), "pbo": pbo, "families": fam,
                "random_control_test_mean": float(np.nanmean([t["test_mean"] for t in rand])) if rand else None,

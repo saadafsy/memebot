@@ -71,8 +71,33 @@ def _iso_to_ts(s: str | None) -> int | None:
         return None
 
 
-def load_pools(data_dir: str | Path, min_candles: int = 10) -> list[Pool]:
+def load_pumpportal(pp_dir: str | Path | None) -> dict[str, dict]:
+    """mint -> {"creator_sol", "create_ts", "migrate_ts"} from the PumpPortal recorder
+    (events-*.jsonl: create and migrate events). Missing directory -> {}."""
+    out: dict[str, dict] = {}
+    if not pp_dir or not Path(pp_dir).exists():
+        return out
+    for f in sorted(Path(pp_dir).glob("events-*.jsonl")):
+        for line in f.read_text().splitlines():
+            try:
+                e = json.loads(line)
+            except ValueError:
+                continue
+            mint, kind = e.get("mint"), e.get("txType")
+            if not mint or kind not in ("create", "migrate"):
+                continue
+            r = out.setdefault(mint, {})
+            if kind == "create":
+                r["creator_sol"] = _f(e.get("solAmount"))
+                r["create_ts"] = _f(e.get("recv_ts"))
+            else:
+                r["migrate_ts"] = _f(e.get("recv_ts"))
+    return out
+
+
+def load_pools(data_dir: str | Path, min_candles: int = 10, pp_dir: str | Path | None = None) -> list[Pool]:
     d = Path(data_dir)
+    pp = load_pumpportal(pp_dir)
     meta = {}
     for line in (d / "pools.jsonl").read_text().splitlines():
         try:
@@ -115,6 +140,11 @@ def load_pools(data_dir: str | Path, min_candles: int = 10) -> list[Pool]:
             liq[ok] = [sn[i][1] for i in idx[ok]]
             b5[ok] = [sn[i][2] for i in idx[ok]]
             s5[ok] = [sn[i][3] for i in idx[ok]]
+        info = pp.get(m.get("base_mint") or "")
+        if info:
+            m = dict(m, pp_creator_sol=info.get("creator_sol"),
+                     pp_secs_to_migrate=(info["migrate_ts"] - info["create_ts"])
+                     if info.get("migrate_ts") and info.get("create_ts") else None)
         reserve = _f(m.get("reserve_usd"))
         if reserve == reserve and reserve > 0:
             liq = np.where(np.isnan(liq), reserve, liq)  # GeckoTerminal reserve when DexScreener has none

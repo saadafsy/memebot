@@ -163,6 +163,27 @@ def boost_window(max_age_min: float, min_liq: float):
     return Entry("boost", (max_age_min, min_liq), fn)
 
 
+def boost_filtered(min_secs_to_migrate: float, max_creator_sol: float):
+    """BOOST window, but only for graduates that look organic per the research: the curve took at least
+    min_secs_to_migrate to fill (fast fills are usually the creator or a bundle buying it out) and the
+    creator's own initial buy was at most max_creator_sol. Needs PumpPortal data (create + migrate)."""
+    def fn(p: Pool):
+        if "pumpswap" not in (p.dex or ""):
+            return None
+        secs, csol = p.meta.get("pp_secs_to_migrate"), p.meta.get("pp_creator_sol")
+        if secs is None or csol is None or not (secs == secs and csol == csol):
+            return None
+        if secs < min_secs_to_migrate or csol > max_creator_sol:
+            return None
+        age = _age_min(p)
+        for i in range(p.n - 1):
+            if age[i] > 2:
+                return None
+            return i
+        return None
+    return Entry("boost_f", (min_secs_to_migrate, max_creator_sol), fn)
+
+
 def graduate_hold(min_age: float, max_age: float, min_ratio: float):
     """'Graduates that hold': a PumpSwap pool hours after migration still at or above its first
     price, with more buys than sells in the latest snapshot."""
@@ -208,6 +229,8 @@ def entries() -> list[Entry]:
         E.append(flow(ratio, mb, a, L))
     for a, L in itertools.product((1, 2), (0, 20_000)):
         E.append(boost_window(a, L))
+    for secs, csol in itertools.product((120, 600), (0.5, 2.0)):
+        E.append(boost_filtered(secs, csol))
     for a0, a1, r in itertools.product((60, 120), (360, 1440), (1.2, 2.0)):
         E.append(graduate_hold(a0, a1, r))
     for seed, L in itertools.product(range(1, 21), (0, 20_000)):
