@@ -32,9 +32,14 @@ N_BLOCKS = 8
 _POOLS = None
 
 
-def _init(data_dir: str, min_candles: int):
+def _init(data_dir: str, min_candles: int, dex: str = ""):
     global _POOLS
-    _POOLS = load_pools(data_dir, min_candles)
+    _POOLS = _filter(load_pools(data_dir, min_candles), dex)
+
+
+def _filter(pools, dex: str):
+    want = {d.strip() for d in dex.split(",") if d.strip()}
+    return [p for p in pools if not want or p.dex in want]
 
 
 def _run_entry(ei: int):
@@ -91,15 +96,18 @@ def main(argv=None) -> int:
     ap.add_argument("--min-test", type=int, default=30)
     ap.add_argument("--top", type=int, default=25)
     ap.add_argument("--workers", type=int, default=os.cpu_count() or 2)
+    ap.add_argument("--dex", default="", help="only these venues, e.g. pumpswap or pump-fun,meteora-dbc")
     a = ap.parse_args(argv)
     t0 = time.time()
-    pools = load_pools(a.data, a.min_candles)
+    pools = _filter(load_pools(a.data, a.min_candles), a.dex)
+    from collections import Counter
+    print("venues:", dict(Counter(p.dex for p in pools)), flush=True)
     out = Path(a.out)
     out.mkdir(parents=True, exist_ok=True)
     E, X = entries(), exits()
     print(f"{len(pools)} pools, {len(E)} entries x {len(X)} exits = {len(E) * len(X)} strategies", flush=True)
     rows = []
-    with ProcessPoolExecutor(a.workers, initializer=_init, initargs=(a.data, a.min_candles)) as ex:
+    with ProcessPoolExecutor(a.workers, initializer=_init, initargs=(a.data, a.min_candles, a.dex)) as ex:
         for r in ex.map(_run_entry, range(len(E))):
             rows.extend(r)
     table = []
@@ -151,7 +159,8 @@ def main(argv=None) -> int:
         w.writeheader()
         for t in sorted(table, key=lambda t: -(t["train_t"] if t["train_t"] == t["train_t"] else -1e9)):
             w.writerow(t)
-    summary = {"pools": len(pools), "train_pools": int(len(pools) * 0.6), "strategies": len(table),
+    from collections import Counter as _C
+    summary = {"venues": dict(_C(p.dex for p in pools)), "dex_filter": a.dex, "pools": len(pools), "train_pools": int(len(pools) * 0.6), "strategies": len(table),
                "candidates_considered": len(cands), "pbo": pbo, "families": fam,
                "random_control_test_mean": float(np.nanmean([t["test_mean"] for t in rand])) if rand else None,
                "top": [{k: v for k, v in t.items() if not k.startswith("_")} for t in top],

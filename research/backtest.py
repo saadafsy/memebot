@@ -101,6 +101,9 @@ def load_pools(data_dir: str | Path, min_candles: int = 10) -> list[Pool]:
             liq[ok] = [sn[i][1] for i in idx[ok]]
             b5[ok] = [sn[i][2] for i in idx[ok]]
             s5[ok] = [sn[i][3] for i in idx[ok]]
+        reserve = _f(m.get("reserve_usd"))
+        if reserve == reserve and reserve > 0:
+            liq = np.where(np.isnan(liq), reserve, liq)  # GeckoTerminal reserve when DexScreener has none
         pools.append(Pool(f.stem, m.get("dex") or "", created, t, a[:, 1], a[:, 2], a[:, 3], a[:, 4], a[:, 5],
                           liq, b5, s5, m))
     pools.sort(key=lambda p: p.created_ts)
@@ -116,20 +119,26 @@ def _f(x) -> float:
 
 
 # --------------------------------------------------------------------------- costs
+# Pool fee per side by venue (+ Jupiter's 0.1%). pump.fun's bonding curve charges 1.25% per side;
+# PumpSwap small caps up to 1.25% (measured round trips on PumpSwap coins: 1.5-3%); Raydium/Meteora lower.
+DEX_FEE_SIDE = {"pump-fun": 0.0135, "pumpswap": 0.0095, "raydium": 0.0035, "raydium-clmm": 0.0035,
+                "raydium-launchlab": 0.0110, "meteora": 0.0060, "meteora-damm-v2": 0.0060, "meteora-dbc": 0.0110}
+
+
 @dataclass(frozen=True)
 class Costs:
-    """Per-side cost as a fraction of notional. Defaults are calibrated on the measured Jupiter quotes:
-    a $20 round trip cost 0.7%-3.0% (mean 2.0%) at $21k-$300k liquidity, before network fees."""
-    base_side: float = 0.008        # pool fee + Jupiter 0.1% per side
-    impact_k: float = 1.0           # extra impact ~ k * size / liquidity per side
-    unknown_liq: float = 30_000.0   # liquidity assumed when no snapshot
+    """Per-side cost as a fraction of notional, calibrated on the measured Jupiter quotes (a $20 round
+    trip cost 0.7%-3.0%, mean 2.0%, at $21k-$300k liquidity, before network fees)."""
+    default_side: float = 0.0110    # venue fee when the dex is unknown
+    impact_k: float = 2.0           # constant-product impact ~ 2 * size / liquidity per side
+    unknown_liq: float = 3_000.0    # pessimistic liquidity when neither a snapshot nor a reserve is known
     stop_extra: float = 0.01        # extra slippage on stop-loss / data_end exits (fast markets)
     network_usd: float = 0.06       # 2 swaps incl. priority fee, plus a share of token-account rent
     mult: float = 1.0               # stress multiplier
 
-    def side(self, liq: float) -> float:
+    def side(self, liq: float, dex: str = "") -> float:
         L = liq if (liq and liq == liq and liq > 0) else self.unknown_liq
-        return self.mult * (self.base_side + self.impact_k * SIZE_USD / L)
+        return self.mult * (DEX_FEE_SIDE.get(dex, self.default_side) + self.impact_k * SIZE_USD / L)
 
 
 # --------------------------------------------------------------------------- exits
@@ -167,7 +176,7 @@ def simulate(p: Pool, i_sig: int, ex: Exit, costs: Costs) -> Trade | None:
     liq0 = p.liq[i_sig]
     if liq0 == liq0 and liq0 < 100 * SIZE_USD:
         return None  # position would be more than 1% of the pool
-    side_in = costs.side(liq0)
+    side_in = costs.side(liq0, p.dex)
     px_in = p.o[i0]
     if not (px_in > 0):
         return None
@@ -198,7 +207,7 @@ def simulate(p: Pool, i_sig: int, ex: Exit, costs: Costs) -> Trade | None:
         j = p.n - 1
         reason, px_out = "data_end", p.c[-1]
     liq_out = p.liq[min(j, p.n - 1)]
-    side_out = costs.side(liq_out) + (costs.stop_extra * costs.mult if reason in ("stop", "trail", "data_end") else 0.0)
+    side_out = costs.side(liq_out, p.dex) + (costs.stop_extra * costs.mult if reason in ("stop", "trail", "data_end") else 0.0)
     gross = px_out / px_in - 1.0
     net_frac = (1 - side_in) * (px_out / px_in) * (1 - side_out) - 1.0
     net_usd = SIZE_USD * net_frac - costs.network_usd * costs.mult
@@ -280,7 +289,7 @@ def simulate_many(p: Pool, i_sig: int, exits: list[Exit], costs: Costs) -> list[
     if p.liq[i_sig] == p.liq[i_sig] and p.liq[i_sig] < 100 * SIZE_USD:
         return None  # position would be more than 1% of the pool
     px_in = p.o[i0]
-    side_in = costs.side(p.liq[i_sig])
+    side_in = costs.side(p.liq[i_sig], p.dex)
     t, o, h, l = p.t[i0:], p.o[i0:], p.h[i0:], p.l[i0:]
     # highest high of candles strictly before each candle (trailing reference), starting at entry price
     prior_hi = np.maximum.accumulate(np.concatenate(([px_in], h[:-1])))
@@ -307,7 +316,7 @@ def simulate_many(p: Pool, i_sig: int, exits: list[Exit], costs: Costs) -> list[
                 px_out = o[k] if o[k] <= stop[k] else stop[k]
             else:
                 reason, px_out = "tp", max(tp, o[k])
-        side_out = costs.side(p.liq[j]) + (costs.stop_extra * costs.mult if reason in ("stop", "trail", "data_end") else 0.0)
+        side_out = costs.side(p.liq[j], p.dex) + (costs.stop_extra * costs.mult if reason in ("stop", "trail", "data_end") else 0.0)
         net_frac = (1 - side_in) * (px_out / px_in) * (1 - side_out) - 1.0
         out.append((SIZE_USD * net_frac - costs.network_usd * costs.mult, reason, j))
     return out

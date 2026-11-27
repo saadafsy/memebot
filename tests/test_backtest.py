@@ -11,14 +11,14 @@ sys.path.insert(0, str(ROOT))
 from research.backtest import Costs, Exit, Pool, holm, pbo_cscv, simulate, simulate_many, stats  # noqa: E402
 from research.strategies import entries, exits  # noqa: E402
 
-ZERO = Costs(base_side=0.0, impact_k=0.0, stop_extra=0.0, network_usd=0.0)
+ZERO = Costs(default_side=0.0, impact_k=0.0, stop_extra=0.0, network_usd=0.0)
 
 
 def pool(rows, liq=50_000.0):
     a = np.asarray(rows, float)
     n = len(a)
     t = np.arange(n) * 60 + 1_000_000
-    return Pool("P", "pumpswap", int(t[0]), t, a[:, 0], a[:, 1], a[:, 2], a[:, 3], np.full(n, 100.0),
+    return Pool("P", "", int(t[0]), t, a[:, 0], a[:, 1], a[:, 2], a[:, 3], np.full(n, 100.0),
                 np.full(n, liq), np.full(n, np.nan), np.full(n, np.nan))
 
 
@@ -50,7 +50,15 @@ def test_trailing_uses_prior_highs_only():
 def test_costs_always_subtract():
     p = pool([[1, 1, 1, 1], [1, 1, 1, 1], [1, 1, 1, 1]])
     tr = simulate(p, 0, Exit(tp=None, sl=None, max_min=1), Costs())
-    assert tr.gross == 0 and tr.net_usd < -0.3  # about 1.7% of $20 plus network
+    assert tr.gross == 0 and tr.net_usd < -0.3  # about 2.4% of $20 plus network
+
+
+def test_costs_by_venue_and_thin_pools():
+    c = Costs()
+    assert c.side(50_000, "pump-fun") > c.side(50_000, "pumpswap") > c.side(50_000, "raydium")
+    assert c.side(float("nan"), "raydium") > c.side(300_000, "raydium")  # unknown liquidity is pessimistic
+    p = pool([[1, 1, 1, 1], [1, 1, 1, 1], [1, 1, 1, 1]], liq=1_500.0)
+    assert simulate(p, 0, Exit(), c) is None  # a $20 trade would be >1% of a $1.5k pool
 
 
 def test_dead_pool_exits_at_last_price():
