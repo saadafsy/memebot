@@ -55,7 +55,7 @@ def test_costs_always_subtract():
 
 def test_costs_by_venue_and_thin_pools():
     c = Costs()
-    assert c.side(50_000, "pump-fun") > c.side(50_000, "pumpswap") > c.side(50_000, "raydium")
+    assert c.side(50_000, "pump-fun") > c.side(50_000, "pumpswap", 5_000_000) > c.side(50_000, "raydium")
     assert c.side(float("nan"), "raydium") > c.side(300_000, "raydium")  # unknown liquidity is pessimistic
     p = pool([[1, 1, 1, 1], [1, 1, 1, 1], [1, 1, 1, 1]], liq=1_500.0)
     assert simulate(p, 0, Exit(), c) is None  # a $20 trade would be >1% of a $1.5k pool
@@ -109,3 +109,17 @@ def test_matrix_size_and_stats_helpers():
     perf = np.vstack([np.random.default_rng(i).normal(0, 1, 8) for i in range(30)])
     assert 0.0 <= pbo_cscv(perf) <= 1.0
     assert stats([])["n"] == 0
+
+
+def test_dead_pool_exit_is_haircut_and_tiered_pumpswap_fee():
+    from research.backtest import DEAD_HAIRCUT, deflated_sharpe
+    p = pool([[1, 1, 1, 1], [1, 1, 1, 1], [0.5, 0.5, 0.5, 0.5]])
+    p.meta["dead_end"] = True
+    tr = simulate(p, 0, Exit(tp=None, sl=None, max_min=10_000), ZERO)
+    assert tr.reason == "dead" and tr.exit_px == pytest.approx(0.5 * DEAD_HAIRCUT)
+    c = Costs()
+    assert c.side(50_000, "pumpswap", 50_000) > c.side(50_000, "pumpswap", 5_000_000)
+    rng = np.random.default_rng(1)
+    noise = rng.normal(0, 1, 300)
+    assert deflated_sharpe(noise, 27_000, 0.01) < 0.5  # zero edge after 27,000 tries is not significant
+    assert deflated_sharpe(noise + 1.0, 27_000, 0.01) > 0.95

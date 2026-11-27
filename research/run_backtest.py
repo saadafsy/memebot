@@ -25,7 +25,7 @@ from pathlib import Path
 
 import numpy as np
 
-from .backtest import Costs, bootstrap_p_mean_le_0, holm, load_pools, pbo_cscv, simulate_many
+from .backtest import Costs, bootstrap_ci, bootstrap_p_mean_le_0, deflated_sharpe, holm, load_pools, pbo_cscv, simulate_many
 from .strategies import entries, exits
 
 N_BLOCKS = 8
@@ -116,11 +116,18 @@ def main(argv=None) -> int:
         table.append({"family": r["family"], "entry": r["entry"], "exit": r["exit"],
                       **{f"train_{k}": v for k, v in tr.items()}, **{f"test_{k}": v for k, v in te.items()},
                       "test2x_mean": te2["mean"], "test2x_total": te2["total"],
-                      "reasons": json.dumps(r["reasons"]), "_te": r["te"], "_blk": r["blk"]})
+                      "reasons": json.dumps(r["reasons"]), "_te": r["te"], "_tr": r["tr"], "_blk": r["blk"]})
     # ---- selection on TRAIN only
     cands = [t for t in table if t["train_n"] >= a.min_train and t["family"] != "random"]
     cands.sort(key=lambda t: t["train_t"], reverse=True)
     top = cands[:a.top]
+    # per-trade Sharpe variance across all candidate strategies on TRAIN (for the deflated Sharpe ratio)
+    sr_tr = [t["train_mean"] / s if (s := np.std(t["_tr"], ddof=1)) > 0 else 0.0 for t in cands if len(t["_tr"]) > 2]
+    sr_var = float(np.var(sr_tr)) if len(sr_tr) > 1 else float("nan")
+    for t in top:
+        x = np.asarray(t["_te"], float)
+        t["test_ci95_low"], t["test_ci95_high"] = bootstrap_ci(x)
+        t["test_deflated_sharpe"] = deflated_sharpe(x, len(table), sr_var)
     pv = [bootstrap_p_mean_le_0(np.asarray(t["_te"])) if t["test_n"] >= 5 else 1.0 for t in top]
     adj = holm(pv)
     for t, p_raw, p_adj in zip(top, pv, adj):
@@ -160,7 +167,12 @@ def main(argv=None) -> int:
         for t in sorted(table, key=lambda t: -(t["train_t"] if t["train_t"] == t["train_t"] else -1e9)):
             w.writerow(t)
     from collections import Counter as _C
-    summary = {"venues": dict(_C(p.dex for p in pools)), "dex_filter": a.dex, "pools": len(pools), "train_pools": int(len(pools) * 0.6), "strategies": len(table),
+    span_h = (max(p.t[-1] for p in pools) - min(p.t[0] for p in pools)) / 3600 if pools else 0.0
+    summary = {"label": ("EXPLORATORY: under 24 h of data; a pass here is only a candidate for forward paper "
+                         "trading, never proof of an edge") if span_h < 24 else "full run",
+               "data_span_hours": round(span_h, 2), "variants_tested": len(table),
+               "dead_pools": sum(1 for p in pools if p.meta.get("dead_end")),
+               "venues": dict(_C(p.dex for p in pools)), "dex_filter": a.dex, "pools": len(pools), "train_pools": int(len(pools) * 0.6), "strategies": len(table),
                "candidates_considered": len(cands), "pbo": pbo, "families": fam,
                "random_control_test_mean": float(np.nanmean([t["test_mean"] for t in rand])) if rand else None,
                "top": [{k: v for k, v in t.items() if not k.startswith("_")} for t in top],
