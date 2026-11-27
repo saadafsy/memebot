@@ -1,0 +1,11 @@
+services:
+  memebot:
+    build: .
+    restart: unless-stopped
+    env_file: .env
+    environment:
+      PANEL_HOST: 0.0.0.0
+    ports:
+      - "127.0.0.1:8787:8787"
+    volumes:
+      - ./data:/data

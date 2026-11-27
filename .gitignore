@@ -1,0 +1,8 @@
+.env
+data/
+data-*/
+*.lock
+__pycache__/
+.pytest_cache/
+*.pyc
+.venv/

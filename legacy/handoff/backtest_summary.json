@@ -1,0 +1,51 @@
+{
+  "total_trades": 100,
+  "wins": 8,
+  "win_rate_pct": 8.0,
+  "total_gross_pnl": -17.71,
+  "total_fees": 180.0,
+  "total_net_pnl": -197.71,
+  "net_pnl_without_top3": -210.31,
+  "reasons": {
+    "take_profit": 3,
+    "stop_loss": 12,
+    "time_exit": 85
+  },
+  "per_coin": {
+    "BRUH": {
+      "candles": 495,
+      "trades": 13,
+      "wins": 5,
+      "win_rate_pct": 38.5,
+      "net_pnl": -11.06
+    },
+    "Buttcoin": {
+      "candles": 1000,
+      "trades": 22,
+      "wins": 2,
+      "win_rate_pct": 9.1,
+      "net_pnl": -49.31
+    },
+    "neet": {
+      "candles": 1000,
+      "trades": 22,
+      "wins": 0,
+      "win_rate_pct": 0.0,
+      "net_pnl": -56.16
+    },
+    "67": {
+      "candles": 1000,
+      "trades": 22,
+      "wins": 1,
+      "win_rate_pct": 4.5,
+      "net_pnl": -39.79
+    },
+    "ALLINDOGE": {
+      "candles": 1000,
+      "trades": 21,
+      "wins": 0,
+      "win_rate_pct": 0.0,
+      "net_pnl": -41.39
+    }
+  }
+}

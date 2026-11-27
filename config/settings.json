@@ -1,0 +1,17 @@
+{
+  "mode": "SIM",
+  "position_size_usd": 20,
+  "take_profit_pct": 30,
+  "stop_loss_pct": 15,
+  "time_exit_hours": 24,
+  "roundtrip_fee_usd": 1.8,
+  "max_open_positions": 5,
+  "daily_loss_cap_usd": 15,
+  "min_liquidity_usd": 20000,
+  "min_holders": 500,
+  "max_top10_pct": 30,
+  "max_price_mismatch_pct": 3,
+  "poll_seconds": 300,
+  "target_closed_trades": 100,
+  "reentry_cooldown_hours": 24
+}

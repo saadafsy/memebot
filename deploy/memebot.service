@@ -1,0 +1,25 @@
+# systemd unit for an always-on Linux box (e.g. a small VPS or a Raspberry Pi).
+# Install:  sudo cp deploy/memebot.service /etc/systemd/system/ && sudo systemctl daemon-reload
+#           sudo systemctl enable --now memebot     # logs: journalctl -u memebot -f
+[Unit]
+Description=memebot (Solana memecoin bot, paper-first)
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=memebot
+WorkingDirectory=/opt/memebot
+EnvironmentFile=/opt/memebot/.env
+ExecStart=/opt/memebot/.venv/bin/python -m memebot run --data /opt/memebot/data
+Restart=always
+RestartSec=10
+# Hardening
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=strict
+ProtectHome=true
+ReadWritePaths=/opt/memebot/data
+
+[Install]
+WantedBy=multi-user.target

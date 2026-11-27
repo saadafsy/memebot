@@ -1,0 +1,63 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="theme-color" content="#0f1720">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<title>memebot</title>
+<link rel="manifest" href="/manifest.webmanifest">
+<link rel="apple-touch-icon" href="/apple-touch-icon.png">
+<link rel="stylesheet" href="/app.css">
+</head>
+<body>
+<header>
+  <h1>memebot</h1>
+  <span id="conn" class="pill">connecting…</span>
+</header>
+<main>
+  <div id="banner" class="banner hidden"></div>
+  <section id="engines"></section>
+  <section class="card">
+    <h2>Controls</h2>
+    <div class="row">
+      <button class="big go" data-act="start" data-target="PAPER">Start paper</button>
+      <button class="big stop" data-act="stop" data-target="PAPER">Stop paper</button>
+    </div>
+    <div class="row live-only hidden">
+      <button class="big go real" data-act="start" data-target="REAL">Start REAL</button>
+      <button class="big stop" data-act="stop" data-target="REAL">Stop REAL</button>
+    </div>
+    <div class="row">
+      <button class="big warn" data-act="pause">Pause everything</button>
+      <button class="big" data-act="resume">Resume</button>
+    </div>
+    <p class="hint">Stop = no new entries; open positions still exit on take-profit, stop-loss or time.
+      Pause everything = no entries and no automatic exits. Mode and settings can only be changed on the computer.</p>
+  </section>
+  <section class="card" id="approvals-card" hidden>
+    <h2>Waiting for your approval (REAL)</h2>
+    <div id="approvals"></div>
+  </section>
+  <section class="card">
+    <h2>Open positions</h2>
+    <div id="positions" class="tablewrap"></div>
+  </section>
+  <section class="card">
+    <h2>Recent trades <select id="book"><option>PAPER</option></select></h2>
+    <div id="trades" class="tablewrap"></div>
+  </section>
+  <section class="card">
+    <h2>Alerts</h2>
+    <ul id="alerts" class="alerts"></ul>
+  </section>
+  <section class="card">
+    <h2>Settings <small>(read-only)</small></h2>
+    <pre id="settings"></pre>
+  </section>
+  <p class="foot"><button id="logout" class="link">Log out</button></p>
+</main>
+<script src="/app.js"></script>
+</body>
+</html>
