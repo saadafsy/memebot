@@ -157,6 +157,7 @@ def _his_gate():
 ])
 def test_gate_matches_his_function(live_cfg, case):
     m = _his_gate()
+    live_cfg.values["live_max_price_impact_pct"] = 3.0  # his LiveSafetyConfig value, for a like-for-like check
     args = dict(expected_mint="M", quote_mint=case.get("quote_mint", "M"), ref=1.0, jp=case.get("jp", 1.01),
                 impact=case.get("impact", 1.0), open_n=case.get("open_n", 0), day=case.get("day", 0.0),
                 creator=case.get("creator", "rugcheck_ok(score=1)"), sell=case.get("sell", True))
@@ -221,7 +222,7 @@ async def test_live_reject_and_expire(live_cfg, tmp_path, market, kp):
 
 
 @pytest.mark.parametrize("jup_kw,reason", [
-    (dict(sell_ok=False), "sell route"), (dict(impact=5.0), "price impact"), (dict(rt_keep=0.8), "round-trip"),
+    (dict(sell_ok=False), "sell route"), (dict(impact=12.0), "price impact"), (dict(rt_keep=0.94), "round-trip"),
 ])
 async def test_live_gate_blocks_buy(live_cfg, tmp_path, market, kp, jup_kw, reason):
     jup = FakeJup(kp=kp, **jup_kw)

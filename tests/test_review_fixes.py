@@ -205,4 +205,40 @@ async def test_quoted_paper_fee_is_booked(cfg, data, market, notifier):
     await e.tick()
     t = data.read_csv(data.trades_path)[0]
     assert float(t["net_pnl"]) == pytest.approx(float(t["gross_pnl"]) - fee, abs=0.01)
-    assert len(t) == 23  # Jawad's 23 columns unchanged
+    assert list(t)[:23] == __import__("memebot.storage", fromlist=["x"]).TRADE_FIELDS
+
+
+async def test_flat_fee_kept_and_quoted_cost_logged_beside_it(cfg, data, market, notifier):
+    """Jawad (doc, 3:39 PM): keep $1.80 for this run, log the quoted cost as a separate column."""
+    from memebot.engine import Engine
+    from memebot.executors import SimExecutor
+    assert cfg["paper_fee_mode"] == "flat" and cfg["log_quoted_fee"] is True
+    e = Engine(cfg, data, market, SimExecutor(cfg, FakeJup(rt_keep=0.98)), notifier)
+    write_watch(data, [row("A", price="0.01")], {"A": "ENTRY OK"})
+    market.set("A", 0.01)
+    await e.tick(force_scan=True)
+    assert "paper_fee_usd" not in e.state["open"][0]
+    market.set("A", 0.0131)
+    await e.tick()
+    t = data.read_csv(data.trades_path)[0]
+    assert float(t["net_pnl"]) == pytest.approx(float(t["gross_pnl"]) - 1.8, abs=0.011)  # flat fee booked
+    q = float(t["quoted_fee_usd"])
+    assert q == pytest.approx(0.89, abs=0.01)
+    assert float(t["net_pnl_quoted"]) == pytest.approx(float(t["gross_pnl"]) - q, abs=0.011)
+    assert list(t)[:23] == __import__("memebot.storage", fromlist=["x"]).TRADE_FIELDS  # his 23 first
+
+
+async def test_quote_failure_never_blocks_a_paper_entry(cfg, data, market, notifier):
+    from memebot.engine import Engine
+    from memebot.executors import SimExecutor
+    jup = FakeJup()
+
+    async def down(mint):
+        return None
+
+    jup.usd_price = down
+    e = Engine(cfg, data, market, SimExecutor(cfg, jup), notifier)
+    write_watch(data, [row("A", price="0.01")], {"A": "ENTRY OK"})
+    market.set("A", 0.01)
+    await e.tick(force_scan=True)
+    assert len(e.state["open"]) == 1 and "quoted_fee_usd" not in e.state["open"][0]

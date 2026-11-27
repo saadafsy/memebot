@@ -22,7 +22,7 @@ strategy rules (from his `sim-bot`) with three modes behind one switch in `setti
 memebot/            the bot (engine, executors, Telegram bot, web panel + PWA)
 config/settings.json  Jawad's settings, byte-identical (sha256 b9f69186...)
 legacy/             Jawad's original files, untouched, plus a runner for his test_bot.py
-tests/              95 automated tests (pytest)
+tests/              99 automated tests (pytest)
 deploy/             systemd unit for an always-on Linux box
 Dockerfile, docker-compose.yml
 start-windows.bat, start-mac-linux.sh
@@ -164,8 +164,9 @@ Solana memecoins with $21k to $300k liquidity:
   movement during a real trade, which can be large in fast pumps and dumps.
 
 So the flat $1.80 (9%) makes paper results look worse than reality would, but it is a defensible safety
-buffer. Leave it, or set `"paper_fee_mode": "quoted"` to book each paper trade's cost from real quotes at
-entry. `python -m memebot fees --data data` measures it for the coins in your watchlist. Even with
+buffer. Jawad chose to keep $1.80 for the current paper run; with `log_quoted_fee` (on by default) every
+paper trade also records the real quoted cost and the P/L it would give, so both can be compared at the
+end. `"paper_fee_mode": "quoted"` would book the quoted cost instead (change it only between runs). `python -m memebot fees --data data` measures it for the coins in your watchlist. Even with
 realistic fees, Jawad's backtest is still -$17.71 before any fee, so the fee is not what makes it lose.
 
 ## Settings
@@ -187,8 +188,8 @@ Optional keys this version adds (all have defaults; add them only to change them
 | `slippage_bps` | 300 | Jupiter slippage for SHEET/LIVE |
 | `creator_check` | `rugcheck` | `off` disables RugCheck (then LIVE refuses to start) |
 | `live_max_open` | 3 | max real positions |
-| `live_max_price_impact_pct` | 3 | |
-| `live_max_roundtrip_loss_pct` | 10 | buy-then-sell quote must lose less than this |
+| `live_max_roundtrip_loss_pct` | 5 | the main cost gate: a buy-then-sell quote must lose less than this |
+| `live_max_price_impact_pct` | 10 | loose sanity cap only: Jupiter's `priceImpact` was measured to be noisy (4.2% reported on a coin whose real round trip cost 1.4%) |
 | `live_wallet_budget_usd` | 40 | max $ in real positions at once (≈ his $60 CAD) |
 | `live_min_sol_reserve` | 0.02 | SOL always kept for fees |
 | `live_require_approval` | true | each real buy needs an Approve tap |
@@ -196,7 +197,8 @@ Optional keys this version adds (all have defaults; add them only to change them
 | `live_sell_max_failures` | 5 | then MANUAL ACTION NEEDED |
 | `pumpfun_audit` | true | record the pump.fun price as an audit field |
 | `live_requires_paper_target` | true | real entries can't be turned on until paper has `target_closed_trades` closed |
-| `paper_fee_mode` | `flat` | `flat` = `roundtrip_fee_usd` per trade (Jawad's rule); `quoted` = real Jupiter round-trip quote at entry |
+| `paper_fee_mode` | `flat` | `flat` = `roundtrip_fee_usd` per trade (Jawad's rule, kept for the current run); `quoted` = book the real Jupiter round-trip quote instead |
+| `log_quoted_fee` | true | also log the real quoted cost next to the flat fee: `quoted_fee_usd` and `net_pnl_quoted` columns at the end of trades.csv, so both can be compared |
 | `network_fee_sol_per_swap` | 0.0002 | used by `quoted` |
 | `token_account_rent_sol` | 0.00204 | used by `quoted` |
 
@@ -219,7 +221,7 @@ Optional keys this version adds (all have defaults; add them only to change them
 
 ```bash
 pip install -r requirements-dev.txt
-python -m pytest -q                  # 95 tests
+python -m pytest -q                  # 99 tests
 python legacy/run_legacy_tests.py    # Jawad's original 14 tests against his original bot.py
 ```
 

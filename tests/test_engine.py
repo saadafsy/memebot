@@ -114,7 +114,7 @@ async def test_bug4_sheet_printed_once_per_day(cfg, data, market, notifier, caps
 
         async def buy(self, ctx):
             FakeSheet.n += 1
-            return BuyResult(ok=False, sheet={"mint": ctx.mint, "verdict": "PASS"})
+            return BuyResult(ok=False, sheet={"mint": ctx.mint, "verdict": "PRE-TRADE SAFETY PASS"})
 
     e = Engine(cfg, data, market, FakeSheet(), notifier)
     write_watch(data, [row("A")], {"A": "ENTRY OK"})
@@ -227,3 +227,33 @@ async def test_status_shape(cfg, data, market, notifier):
     for k in ("state", "open", "closed", "target_closed", "today_pnl", "realized_pnl", "label"):
         assert k in st
     assert st["state"] == "ON" and st["label"] == "PAPER"
+
+
+async def test_sheet_blocked_verdict_gets_no_sign_alert(cfg, data, market, notifier):
+    from memebot.executors import BuyResult
+
+    class FakeSheet:
+        mode = "SHEET"
+
+        async def buy(self, ctx):
+            return BuyResult(ok=False, sheet={"mint": ctx.mint, "verdict": "DO NOT TRADE: price mismatch 4.91% > 3%"})
+
+    e = Engine(cfg, data, market, FakeSheet(), notifier)
+    write_watch(data, [row("A")], {"A": "ENTRY OK"})
+    market.set("A", 1.0)
+    await e.tick(force_scan=True)
+    assert not data.sheets_path.exists()
+    assert not data.alerts_log.exists() or "TRADE_SHEET" not in data.alerts_log.read_text()
+    assert e.state["sheets_printed"] == {}  # may still pass later today
+    assert "DO NOT TRADE" in data.read_csv(data.skips_path)[0]["reason"]
+
+
+async def test_max_open_leaves_a_skip_row(cfg, data, market, notifier):
+    e = make(cfg, data, market, notifier)
+    write_watch(data, [row(f"M{i}") for i in range(7)], {f"M{i}": "ENTRY OK" for i in range(7)})
+    for i in range(7):
+        market.set(f"M{i}", 1.0)
+    await e.tick(force_scan=True)
+    reasons = [r["reason"] for r in data.read_csv(data.skips_path)]
+    assert reasons.count("max open positions reached (5)") == 2
+    assert e.state["open"][0]["tp"] == 1.3 and e.state["open"][0]["sl"] == 0.85

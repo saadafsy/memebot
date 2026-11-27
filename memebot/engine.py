@@ -21,6 +21,11 @@ from .strategy import passes_filters, skip_key
 log = logging.getLogger(__name__)
 
 
+def _sig(x: float) -> float:
+    """Round to 10 significant digits (0.00044238999999999997 -> 0.00044239)."""
+    return float(f"{x:.10g}")
+
+
 def _valid(x: Any) -> bool:
     return isinstance(x, (int, float)) and not isinstance(x, bool) and math.isfinite(x)
 
@@ -304,6 +309,11 @@ class Engine:
             "gross_pnl": round(gross, 2), "net_pnl": round(net, 2),
         }
         fields = list(TRADE_FIELDS)
+        if self.mode != "LIVE" and pos.get("quoted_fee_usd") is not None:
+            # Jawad: keep the flat fee for the run, log the real quoted cost beside it to compare.
+            row.update({"quoted_fee_usd": pos["quoted_fee_usd"],
+                        "net_pnl_quoted": round(gross - float(pos["quoted_fee_usd"]), 2)})
+            fields += ["quoted_fee_usd", "net_pnl_quoted"]
         if self.mode == "LIVE":
             row.update({"mode": "LIVE", "buy_tx_sig": pos.get("buy_tx_sig", ""), "sell_tx_sig": res.tx_sig,
                         "actual_entry_price": pos["entry"], "actual_exit_price": exit_price,
@@ -442,7 +452,8 @@ class Engine:
             if not self.entries_on or self.paused:
                 break  # Stop/Pause pressed while this scan was running
             if len(s["open"]) + self._pending_count() >= self.max_open():
-                break
+                self.skip(addr, name, f"max open positions reached ({self.max_open()})")
+                continue
             live = prices.get(addr)
             if not live:
                 self.skip(addr, name, "blind: no live price")
@@ -486,11 +497,14 @@ class Engine:
         else:
             res = await self.ex.buy(ctx)
         if self.mode == "SHEET":
-            if res.sheet:
+            if res.sheet and str(res.sheet.get("verdict", "")).startswith("PRE-TRADE SAFETY PASS"):
                 s["sheets_printed"][addr] = s.get("day")
                 self.data.append_csv(self.data.sheets_path, dict(time=timeutil.iso(timeutil.now()), **res.sheet))
                 self.notify.alert("TRADE_SHEET", f"{name}: sign this yourself in Jupiter (not auto-traded)",
                                   res.sheet)
+            elif res.sheet:
+                # Failed a safety check: no sheet, no "sign this" alert, and it may still pass later today.
+                self.skip(addr, name, str(res.sheet.get("verdict")))
             return
         if not res.ok:
             self.skip(addr, name, res.error or "buy failed")
@@ -523,8 +537,8 @@ class Engine:
         now = timeutil.now()
         pos = {
             "address": row["address"].strip(), "name": (row.get("name") or row["address"][:8]).strip(),
-            "entry": entry, "tp": entry * (1 + cfg["take_profit_pct"] / 100.0),
-            "sl": entry * (1 - cfg["stop_loss_pct"] / 100.0), "opened": timeutil.iso(now),
+            "entry": entry, "tp": _sig(entry * (1 + cfg["take_profit_pct"] / 100.0)),
+            "sl": _sig(entry * (1 - cfg["stop_loss_pct"] / 100.0)), "opened": timeutil.iso(now),
             "deadline": timeutil.iso(now + timedelta(hours=cfg["time_exit_hours"])),
             "liq_at_entry": round(live["liq"], 2), "dex_pair": live.get("pair", ""),
             "holders": float(row["holders"]), "top10_pct": float(row["top10_pct"]),
@@ -536,6 +550,8 @@ class Engine:
         }
         if self.mode == "SIM" and res.fee_usd > 0:
             pos["paper_fee_usd"] = round(res.fee_usd, 4)  # paper_fee_mode "quoted"
+        if self.mode == "SIM" and res.extra.get("quoted_fee_usd") is not None:
+            pos["quoted_fee_usd"] = res.extra["quoted_fee_usd"]  # logged next to the flat fee for comparison
         if self.mode == "LIVE":
             pos.update({"buy_tx_sig": res.tx_sig, "tokens_received": res.tokens_received,
                         "tokens_raw": res.tokens_raw, "entry_fee_usd": res.fee_usd, "usd_spent": res.usd_spent,

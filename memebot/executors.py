@@ -93,11 +93,15 @@ class SimExecutor:
 
     async def buy(self, ctx: BuyContext) -> BuyResult:
         p = ctx.live["price"]
-        fee = 0.0
-        if self.cfg["paper_fee_mode"] == "quoted":
-            fee = await self.quoted_roundtrip_usd(ctx.mint) or 0.0  # 0 -> falls back to the flat fee
+        fee, extra = 0.0, {}
+        if self.cfg["paper_fee_mode"] == "quoted" or self.cfg["log_quoted_fee"]:
+            q = await self.quoted_roundtrip_usd(ctx.mint)
+            if q is not None:
+                extra["quoted_fee_usd"] = round(q, 4)
+                if self.cfg["paper_fee_mode"] == "quoted":
+                    fee = q  # otherwise the flat fee is booked and the quote is only logged for comparison
         return BuyResult(ok=True, fill_price=p, tokens_received=self.cfg["position_size_usd"] / p,
-                         usd_spent=self.cfg["position_size_usd"], fee_usd=fee)
+                         usd_spent=self.cfg["position_size_usd"], fee_usd=fee, extra=extra)
 
     async def sell(self, pos: dict, ref_price: float, reason: str) -> SellResult:
         return SellResult(ok=True, fill_price=ref_price,
@@ -173,8 +177,8 @@ class SheetExecutor(_QuotingExecutor):
             "expected_tokens": round(d.get("tokens", 0), 6), "jupiter_price": d.get("jupiter_price"),
             "dex_price": ctx.live["price"], "price_impact_pct": d.get("buy_price_impact_pct"),
             "roundtrip_loss_pct": d.get("roundtrip_loss_pct"), "slippage_bps": self.cfg["slippage_bps"],
-            "tp_price": (d.get("jupiter_price") or 0) * (1 + self.cfg["take_profit_pct"] / 100),
-            "sl_price": (d.get("jupiter_price") or 0) * (1 - self.cfg["stop_loss_pct"] / 100),
+            "tp_price": float(f"{(d.get('jupiter_price') or 0) * (1 + self.cfg['take_profit_pct'] / 100):.10g}"),
+            "sl_price": float(f"{(d.get('jupiter_price') or 0) * (1 - self.cfg['stop_loss_pct'] / 100):.10g}"),
             "jupiter_link": f"https://jup.ag/swap/SOL-{ctx.mint}",
             "creator_history": ctx.creator_history,
         }

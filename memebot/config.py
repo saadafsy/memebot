@@ -45,8 +45,11 @@ OPTIONAL_KEYS: dict[str, tuple[Any, type, float, float]] = {
     "slippage_bps": (300, int, 1, 5000),
     "creator_check": ("rugcheck", str, 0, 0),
     "live_max_open": (3, int, 1, 100),
-    "live_max_price_impact_pct": (3.0, float, 0.01, 100),
-    "live_max_roundtrip_loss_pct": (10.0, float, 0.1, 100),
+    # Jupiter's priceImpact is measured against its own drifting reference price and was seen to be
+    # noisy (4.2% reported on a coin whose real round trip cost 1.4%). The measured buy-then-sell quote
+    # is the main cost gate; price impact is only a loose sanity cap.
+    "live_max_price_impact_pct": (10.0, float, 0.01, 100),
+    "live_max_roundtrip_loss_pct": (5.0, float, 0.1, 100),
     "live_wallet_budget_usd": (40.0, float, 0.01, 1_000_000),
     "live_min_sol_reserve": (0.02, float, 0, 1000),
     "live_require_approval": (True, bool, 0, 0),
@@ -56,6 +59,7 @@ OPTIONAL_KEYS: dict[str, tuple[Any, type, float, float]] = {
     "pumpfun_audit": (True, bool, 0, 0),
     "live_requires_paper_target": (True, bool, 0, 0),
     "paper_fee_mode": ("flat", str, 0, 0),
+    "log_quoted_fee": (True, bool, 0, 0),
     "network_fee_sol_per_swap": (0.0002, float, 0, 1),
     "token_account_rent_sol": (0.00204, float, 0, 1),
 }

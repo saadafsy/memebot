@@ -6,8 +6,10 @@ spellings are accepted) and anything unexpected fails closed: no trade.
 """
 from __future__ import annotations
 
+import asyncio
 import logging
 import math
+import time
 from dataclasses import dataclass
 from typing import Any
 
@@ -117,6 +119,20 @@ class Jupiter:
         self.base = base.rstrip("/")
         self._decimals: dict[str, int] = {SOL_MINT: 9}
         self._last_usd: dict[str, float] = {}
+        self._usd_at: dict[str, float] = {}
+        self._gate = asyncio.Lock()
+        self._next_ok = 0.0
+        # Keyless Jupiter allows about 0.5 requests per second; pace calls instead of collecting 429s.
+        self.min_interval = 0.0 if api_key else 2.1
+
+    async def _pace(self) -> None:
+        if not self.min_interval:
+            return
+        async with self._gate:
+            wait = self._next_ok - time.monotonic()
+            if wait > 0:
+                await asyncio.sleep(wait)
+            self._next_ok = time.monotonic() + self.min_interval
 
     def _headers(self) -> dict:
         return {"x-api-key": self.api_key} if self.api_key else {}
@@ -130,6 +146,7 @@ class Jupiter:
             params["taker"] = taker
         if slippage_bps:
             params["slippageBps"] = str(int(slippage_bps))
+        await self._pace()
         d = await request_json(self.client, "GET", f"{self.base}/order", params=params,
                                headers=self._headers(), label="jupiter order", retries=2)
         return parse_order(d, taker_set=bool(taker))
@@ -146,6 +163,7 @@ class Jupiter:
     async def _get(self, path: str, params: dict, label: str) -> Any:
         last: FetchError | None = None
         for base in ("https://api.jup.ag", LITE):  # lite-api is being phased out; keep it as a fallback
+            await self._pace()
             try:
                 return await request_json(self.client, "GET", f"{base}{path}", params=params,
                                           headers=self._headers() if base != LITE else {}, label=label, retries=2)
@@ -183,7 +201,9 @@ class Jupiter:
             return dec
         return None
 
-    async def usd_price(self, mint: str) -> float | None:
+    async def usd_price(self, mint: str, max_age: float = 30.0) -> float | None:
+        if mint in self._last_usd and time.monotonic() - self._usd_at.get(mint, 0) < max_age:
+            return self._last_usd[mint]  # SOL's price barely moves within 30 s; saves a call per quote
         pe = await self._price_entry(mint)
         try:
             v = float((pe or {}).get("usdPrice"))
@@ -191,5 +211,6 @@ class Jupiter:
             return self._last_usd.get(mint)  # last good price (or None) beats blocking an exit
         if math.isfinite(v) and v > 0:
             self._last_usd[mint] = v
+            self._usd_at[mint] = time.monotonic()
             return v
         return self._last_usd.get(mint)
