@@ -27,8 +27,17 @@ from pathlib import Path
 import httpx
 
 GT = "https://api.geckoterminal.com/api/v2"
+# With a CoinGecko API key (free Demo plan, about 30 calls/min), the same on-chain data comes from
+# CoinGecko's API instead of GeckoTerminal's keyless limit of about 5 calls/min. The key is read
+# from the environment only (CG_API_KEY) and sent as a header, never written to disk or logs.
+CG_KEY = os.environ.get("CG_API_KEY", "").strip()
+CG_PRO = os.environ.get("CG_API_PLAN", "demo").strip().lower() == "pro"
+if CG_KEY:
+    GT = ("https://pro-api.coingecko.com" if CG_PRO else "https://api.coingecko.com") + "/api/v3/onchain"
 DS = "https://api.dexscreener.com"
 HDR = {"Accept": "application/json;version=20230302", "User-Agent": "memebot-research/1.0"}
+if CG_KEY:
+    HDR["x-cg-pro-api-key" if CG_PRO else "x-cg-demo-api-key"] = CG_KEY
 
 
 class Paced:
@@ -161,7 +170,8 @@ def main() -> int:
     a = ap.parse_args()
     out = Path(a.out)
     (out / "ohlcv").mkdir(parents=True, exist_ok=True)
-    gt_pace, ds_pace = Paced(2.2), Paced(0.25)
+    gt_pace, ds_pace = Paced(2.2 if CG_KEY else 12.0), Paced(0.25)
+    print(f"on-chain data source: {'CoinGecko API (key from CG_API_KEY)' if CG_KEY else 'GeckoTerminal keyless'}", flush=True)
     seen = load_seen(out)
     with httpx.Client() as client:
         if not a.ohlcv_only:
