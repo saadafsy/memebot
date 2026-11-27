@@ -1,0 +1,15 @@
+# Memecoin evidence notes (search-snippet based; arxiv.org & soliduslabs.com fetch blocked by sandbox network)
+- Solidus Labs 2025: 7M+ pump.fun tokens Jan24-Mar25, <100k kept >$1k liquidity; 98.6-98.7% P&D/rug; Raydium 93% of 361k pools soft-rug, median $2,832.
+- Graduation: 0.63% (Marino/Lillo arXiv 2602.14860, 655,770 tokens Sep-Oct 2025); 1.02% (Meme Coin Factories 2609.10246); peak 1.67% wk Nov24; 2.1% mo Jun24; BOOST spike 6.7% Jul 2026.
+- CoinGecko: 68.67% of 18.67M tokens last curve trade on launch day (Jan24-Jun26).
+- Post-grad: MemeFees (vendor, unverified) ~50k grads Sep-Nov 2026: 8.6% >= grad mcap at 24h, 3.6% at 7d, median 3.8% of grad mcap at 24h.
+- Wallet PnL: 0.4% wallets >$10k realized (Jan 2025, 13.55M wallets); 56% lost >=$1k (6mo); CoinGecko monthly profitable share rarely >50%, low 30.1% Jun 2025.
+- SBFC 2025: significant positive returns: creators 19.2%, snipers 16.0%, ordinary 4.4/3.3%, losers 0.8/1.0%.
+- Pine Analytics Apr 2025: deployer-funded snipers 15k+ tokens, 15k+ SOL/month net, 85% sell within 5 min.
+- Bitquery Oct 2026: 3,170 positions >=$100k gains ($752.5M): only 26% conventional trading; 51% from transferred tokens.
+- arXiv 2601.08641: smart money avg 14%/trade vs copier 3% est after frictions.
+- Mongardini & Mei (USENIX Sec 26): 82.8% of 707 >100% tokens show manipulation (34,988 tokens).
+- Influencer tweets: +1.83% 1d, -2.24% 10d, -6.53% 30d.
+- Hamrick et al: median pump 3.5%/4.8%; Xu&Livshits 412 pumps.
+- Sandwich: $370-500M over 16 mo (sandwiched.me); 529k SOL/yr wide sandwiches (Ghost).
+- arXiv 2607.02795: numeric results WITHDRAWN Oct 2026.
