@@ -22,7 +22,7 @@ strategy rules (from his `sim-bot`) with three modes behind one switch in `setti
 memebot/            the bot (engine, executors, Telegram bot, web panel + PWA)
 config/settings.json  Jawad's settings, byte-identical (sha256 b9f69186...)
 legacy/             Jawad's original files, untouched, plus a runner for his test_bot.py
-tests/              82 automated tests (pytest)
+tests/              92 automated tests (pytest)
 deploy/             systemd unit for an always-on Linux box
 Dockerfile, docker-compose.yml
 start-windows.bat, start-mac-linux.sh
@@ -197,18 +197,27 @@ Optional keys this version adds (all have defaults; add them only to change them
 
 ```bash
 pip install -r requirements-dev.txt
-python -m pytest -q                  # 82 tests
+python -m pytest -q                  # 92 tests
 python legacy/run_legacy_tests.py    # Jawad's original 14 tests against his original bot.py
 ```
 
 The tests use fake market data, a fake Jupiter and a fake wallet; they never touch the network or
 real money. `tests/test_legacy_bugs.py` reproduces each bot.py bug against his untouched file.
 
+## A second "fast lane" bot
+
+Jawad's notes mention a second paper bot (`sim-fast`, 4-hour time exit). Run it as a second copy with
+its own data folder and settings: copy `data/settings.json` to `data-fast/settings.json`, set
+`"time_exit_hours": 4` and `"lane": "FAST LANE"`, put the same watchlist and verdicts there, and start
+`PANEL_PORT=8788 python -m memebot run --data data-fast --no-telegram` (one Telegram bot token can
+only be polled by one program; use a second BotFather bot if you want fast-lane alerts too). The lock stops two copies from ever sharing one folder.
+
 ## Always-on
 
 The bot only trades while it runs. For 24/7 use either:
 
-* **Docker**: `docker compose up -d --build` (data in `./data`, panel on `127.0.0.1:8787`). If the
+* **Docker**: set `PANEL_PASSWORD` in `.env` (inside the container the panel listens on all interfaces, so the
+  bot requires it), then `docker compose up -d --build` (data in `./data`, panel on `127.0.0.1:8787`). If the
   container can't write `./data`, run `sudo chown -R 10001 data`.
 * **Linux server**: copy to `/opt/memebot`, create `.venv`, then use `deploy/memebot.service`.
 * **Windows PC**: Task Scheduler → "At log on" → run `start-windows.bat`, and set the PC never to sleep.

@@ -14,7 +14,7 @@ from datetime import timedelta
 from typing import Any
 
 from . import timeutil
-from .executors import BuyContext, BuyResult, SellResult
+from .executors import UNKNOWN, BuyContext, BuyResult, SellResult
 from .storage import LIVE_TRADE_FIELDS, SKIP_FIELDS, TRADE_FIELDS, DataDir
 from .strategy import passes_filters, skip_key
 
@@ -147,6 +147,9 @@ class Engine:
         async with self._lock:
             try:
                 self.rollover_day()
+                self.flush_trade_rows()
+                if self.mode == "LIVE":
+                    await self.reconcile_pending()
                 await self.manage()
                 await self.process_approvals()
                 if force_scan or mono_now is None or mono_now >= self._next_scan:
@@ -187,7 +190,9 @@ class Engine:
 
     # ------------------------------------------------------------------ exits
     def _accept_price(self, pos: dict, price: float) -> bool:
-        """Extreme one-tick moves need a second consecutive read before we act on them."""
+        """A one-tick move bigger than extreme_move_pct (a possible bad print) is acted on only after a
+        second consecutive read confirms the same direction. A real crash keeps falling, so it is
+        confirmed on the next tick and the stop-loss fires; a glitch reverts and is ignored."""
         prev = pos.get("last_price") or pos["entry"]
         addr = pos["address"]
         move = abs(price / prev - 1) * 100 if prev > 0 else 0
@@ -195,7 +200,7 @@ class Engine:
             self.pending_extreme.pop(addr, None)
             return True
         first = self.pending_extreme.get(addr)
-        if first is not None and (price - prev) * (first - prev) > 0 and abs(price / first - 1) * 100 <= 25:
+        if first is not None and (price - prev) * (first - prev) > 0:
             self.pending_extreme.pop(addr, None)
             return True
         self.pending_extreme[addr] = price
@@ -260,7 +265,7 @@ class Engine:
         if not res.ok:
             n = int(pos.get("sell_failures", 0)) + 1
             pos["sell_failures"] = n
-            delay = min(300, self.cfg["exit_poll_seconds"] * 2 ** min(n, 6))
+            delay = min(60, self.cfg["exit_poll_seconds"] * n)  # exits retry fast: 15 s, 30 s, 45 s, 60 s...
             pos["next_sell_try_at"] = timeutil.iso(timeutil.now() + timedelta(seconds=delay))
             log.warning("sell %s failed (%d): %s", pos.get("name"), n, res.error)
             if n == self.cfg["live_sell_max_failures"] or (n > self.cfg["live_sell_max_failures"] and n % 20 == 0):
@@ -304,15 +309,17 @@ class Engine:
                         "actual_entry_price": pos["entry"], "actual_exit_price": exit_price,
                         "actual_fee_usd": round(float(pos.get("entry_fee_usd") or 0) + res.fee_usd, 6),
                         "slippage_bps_used": cfg["slippage_bps"], "usd_spent": round(float(pos.get("usd_spent") or 0), 6),
-                        "usd_received": round(res.usd_received, 6), "note": pos.get("note", "")})
+                        "usd_received": round(res.usd_received, 6),
+                        "note": "; ".join(x for x in (pos.get("note", ""), res.note) if x)})
             fields += LIVE_TRADE_FIELDS
-        self.data.append_csv(self.data.trades_path, row, fields)
         s["day_pnl"] = round(s["day_pnl"] + net, 4)
         hrs = cfg["reentry_cooldown_hours"]
         if _valid(hrs) and hrs > 0:
             s.setdefault("cooldowns", {})[pos["address"]] = timeutil.iso(closed_at + timedelta(hours=hrs))
         s["open"] = [p for p in s["open"] if p["address"] != pos["address"]]
-        self.data.save_state(s)
+        s.setdefault("pending_trade_rows", []).append({"row": row, "fields": fields})
+        self.data.save_state(s)  # the close is durable before anything else can fail
+        self.flush_trade_rows()
         st = self.stats()
         self.notify.alert("CLOSE", f"{'GAIN' if net > 0 else 'LOSS'} {pos.get('name')} (${net:+.2f} net, {reason})", {
             "entry": pos["entry"], "exit": exit_price,
@@ -320,9 +327,30 @@ class Engine:
             "W/L": f"{st['wins']}/{st['losses']} ({st['win_rate_pct']}%)",
             "realized_net": f"${st['realized_pnl']:+.2f}", "today_net": f"${s['day_pnl']:+.2f}",
             "open": len(s["open"]), **({"tx": res.tx_sig} if res.tx_sig else {})})
+        if res.note:
+            self.notify.alert("CHECK_TRADE", f"{pos.get('name')}: {res.note}. Check the wallet on Solscan.",
+                              {"mint": pos["address"]}, loud=True)
         if res.tokens_left_raw:
             self.notify.alert("WARN", f"{pos.get('name')}: a small remainder was not sold",
                               {"raw_amount_left": res.tokens_left_raw})
+
+    def flush_trade_rows(self) -> None:
+        """Write queued closed-trade rows to trades.csv. If the file is locked (e.g. open in Excel on
+        Windows) the rows stay queued in state.json and are retried every tick."""
+        q = self.state.get("pending_trade_rows") or []
+        while q:
+            item = q[0]
+            try:
+                self.data.append_csv(self.data.trades_path, item["row"], item["fields"])
+            except OSError as e:
+                if not self.state.get("_csv_lock_alerted"):
+                    self.notify.alert("WARN", f"trades.csv could not be written ({type(e).__name__}); is it open in "
+                                      "Excel? The trade is saved and will be written when the file is free.")
+                    self.state["_csv_lock_alerted"] = True
+                return
+            q.pop(0)
+            self.state.pop("_csv_lock_alerted", None)
+            self.data.save_state(self.state)
 
     # ------------------------------------------------------------------ entries
     def skip(self, addr: str, name: str, reason: str) -> None:
@@ -375,6 +403,9 @@ class Engine:
                                   loud=True)
                 s["loss_cap_alerted_day"] = s.get("day", "")
             return
+        if self.mode == "LIVE" and self.data.unresolved_journal():
+            log.warning("a real trade has an unknown outcome; no new real entries until the wallet confirms it")
+            return
         if not self.data.watchlist_path.exists():
             log.info("watchlist.csv not found yet; skipping scan")
             return
@@ -391,6 +422,8 @@ class Engine:
             name = (row.get("name") or addr[:8]).strip()
             if not addr or addr in held or addr in pending:
                 continue
+            if self.mode == "LIVE" and s.setdefault("live_blocked_today", {}).get(addr) == s.get("day"):
+                continue  # the safety gate already refused it today; don't keep asking for approval
             if cooldowns.get(addr):
                 self.skip(addr, name, f"re-entry cooldown active until {cooldowns[addr]}")
                 continue
@@ -406,6 +439,8 @@ class Engine:
             return
         prices = await self.market.prices([c[0] for c in candidates])
         for addr, name, row, v in candidates:
+            if not self.entries_on or self.paused:
+                break  # Stop/Pause pressed while this scan was running
             if len(s["open"]) + self._pending_count() >= self.max_open():
                 break
             live = prices.get(addr)
@@ -446,19 +481,28 @@ class Engine:
         s = self.state
         ctx = BuyContext(mint=addr, name=name, live=live, creator_history=creator,
                          open_live_count=len(s["open"]), day_pnl=s["day_pnl"], deployed_usd=self.deployed_usd())
-        res: BuyResult = await self.ex.buy(ctx)
+        if self.mode == "LIVE":
+            res: BuyResult = await self.ex.buy(ctx, may_proceed=lambda: self.entries_on and not self.paused)
+        else:
+            res = await self.ex.buy(ctx)
         if self.mode == "SHEET":
             if res.sheet:
                 s["sheets_printed"][addr] = s.get("day")
                 self.data.append_csv(self.data.sheets_path, dict(time=timeutil.iso(timeutil.now()), **res.sheet))
                 self.notify.alert("TRADE_SHEET", f"{name}: sign this yourself in Jupiter (not auto-traded)",
                                   res.sheet)
-                print(f"TRADE SHEET (you sign this yourself in Jupiter — not auto-opened): {res.sheet}", flush=True)
             return
         if not res.ok:
             self.skip(addr, name, res.error or "buy failed")
-            if self.mode == "LIVE" and "on-chain" in (res.error or ""):
-                self.notify.alert("BUY_FAILED", f"{name}: {res.error}", loud=True)
+            if self.mode == "LIVE":
+                if (res.error or "").startswith(UNKNOWN):
+                    self.notify.alert("BUY_UNKNOWN", f"{name}: Jupiter did not confirm the buy. No new real entries "
+                                      "until the wallet shows whether it landed (checked every tick).",
+                                      {"mint": addr, "detail": res.error}, loud=True)
+                else:
+                    s.setdefault("live_blocked_today", {})[addr] = s.get("day")
+                    self.notify.alert("BUY_BLOCKED", f"{name}: not bought", {"reason": res.error},
+                                      loud="on-chain" in (res.error or ""))
             return
         pf = None
         if self.cfg["pumpfun_audit"]:
@@ -514,6 +558,10 @@ class Engine:
                 if not self.entries_on or self.paused:
                     self.notify.alert("APPROVAL", f"{a.name}: entries are OFF now, so nothing was bought")
                     continue
+                if self.data.unresolved_journal():
+                    self.notify.alert("APPROVAL", f"{a.name}: an earlier real trade is still unconfirmed, so nothing "
+                                      "was bought")
+                    continue
                 if any(p["address"] == a.mint for p in self.state["open"]) or len(self.state["open"]) >= self.max_open():
                     continue
                 live = await self.market.price(a.mint)
@@ -529,30 +577,60 @@ class Engine:
             if a.status in ("done", "expired", "rejected") and age > 3600:
                 self.approvals.pop(a.id, None)
 
-    # ------------------------------------------------------------------ LIVE crash recovery
+    # ------------------------------------------------------------------ LIVE crash / unknown-outcome recovery
+    UNKNOWN_GRACE_SECONDS = 600
+
+    async def reconcile_pending(self) -> None:
+        """Resolve journal entries whose outcome is unknown (crash or unclear /execute) against the wallet.
+        A buy whose tokens show up is adopted as a position; a sell whose tokens are gone is closed.
+        After 10 minutes with no change, the trade is treated as not having happened."""
+        ex = self.ex
+        for e in self.data.unresolved_journal():
+            mint = e.get("mint", "")
+            try:
+                raw, dec = await ex.rpc.token_balance(ex.owner, mint)
+            except Exception as err:
+                log.warning("reconcile: balance read failed for %s: %s", mint, type(err).__name__)
+                continue
+            try:
+                age = (timeutil.now() - timeutil.parse(e.get("at", ""))).total_seconds()
+            except ValueError:
+                age = self.UNKNOWN_GRACE_SECONDS + 1
+            held = next((p for p in self.state["open"] if p["address"] == mint), None)
+            if e.get("side") == "buy" and raw > 0 and not held:
+                live = await self.market.price(mint) or {"price": 0.0, "liq": 0.0}
+                tokens = raw / 10 ** dec
+                price = live["price"] or 0.0
+                spent = self.cfg["position_size_usd"]
+                res = BuyResult(ok=True, fill_price=(spent / tokens) if tokens else (price or 1e-12),
+                                tokens_received=tokens, tokens_raw=raw, usd_spent=spent,
+                                tx_sig=e.get("signature", "unknown"))
+                row = {"address": mint, "name": e.get("name") or mint[:8], "holders": 0, "top10_pct": 0,
+                       "scout_price": price}
+                pos = self.open_position(row, live, res, creator="recovered")
+                pos["note"] = "adopted from wallet after an unconfirmed buy; entry estimated from the planned spend"
+                self.data.save_state(self.state)
+                self.notify.alert("RECOVERED", f"The unconfirmed buy of {pos['name']} did land. It is now managed "
+                                  "with the normal take-profit, stop-loss and time exit.", {"tokens": tokens}, loud=True)
+                self.data.journal({"id": e["id"], "status": "reconciled", "token_raw_now": raw})
+            elif e.get("side") == "sell" and raw == 0 and held:
+                ref = held.get("last_price") or held["entry"]
+                tokens = float(held.get("tokens_received") or 0)
+                self.record_close(held, SellResult(ok=True, fill_price=ref, usd_received=tokens * ref,
+                                                   note="sell was unconfirmed but the tokens are gone; amounts estimated"),
+                                  "unconfirmed_sell")
+                self.data.journal({"id": e["id"], "status": "reconciled", "token_raw_now": raw})
+            elif age > self.UNKNOWN_GRACE_SECONDS:
+                self.data.journal({"id": e["id"], "status": "reconciled", "token_raw_now": raw,
+                                   "note": "no wallet change after 10 minutes; treated as not executed"})
+                self.notify.alert("RECOVERED", f"Unconfirmed {e.get('side')} of {e.get('name')}: no wallet change after "
+                                  "10 minutes, treated as not executed. Real entries can resume.")
+
     async def reconcile(self) -> None:
+        """Startup check for LIVE: resolve the journal, then make sure every open position is in the wallet."""
         ex = self.ex
         try:
-            for e in self.data.unresolved_journal():
-                mint = e.get("mint", "")
-                raw, dec = await ex.rpc.token_balance(ex.owner, mint)
-                held = any(p["address"] == mint for p in self.state["open"])
-                if e.get("side") == "buy" and raw > 0 and not held:
-                    live = await self.market.price(mint) or {"price": 0.0, "liq": 0.0}
-                    price = live["price"] or 0.0
-                    tokens = raw / 10 ** dec
-                    res = BuyResult(ok=True, fill_price=price or 1e-12, tokens_received=tokens, tokens_raw=raw,
-                                    usd_spent=price * tokens, tx_sig=e.get("signature", "unknown"))
-                    row = {"address": mint, "name": e.get("name") or mint[:8], "holders": 0, "top10_pct": 0,
-                           "scout_price": price}
-                    pos = self.open_position(row, live, res, creator="recovered")
-                    pos["note"] = "recovered after crash; entry price estimated"
-                    self.notify.alert("RECOVERED", f"Found {pos['name']} in the wallet after a crash; managing it now",
-                                      {"tokens": tokens}, loud=True)
-                elif e.get("side") == "sell" and raw == 0 and held:
-                    self.notify.alert("RECOVERED", f"{e.get('name')} was sold before a crash; check trades.csv",
-                                      loud=True)
-                self.data.journal({"id": e["id"], "status": "reconciled", "token_raw_now": raw})
+            await self.reconcile_pending()
             for p in self.state["open"]:
                 raw, _ = await ex.rpc.token_balance(ex.owner, p["address"])
                 if raw == 0:

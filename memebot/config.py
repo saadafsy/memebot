@@ -130,6 +130,8 @@ def load_settings(path: str | Path) -> Settings:
     except Exception:
         raise SettingsError(f"timezone {vals['timezone']!r} is not a known IANA zone "
                             "(on Windows run: pip install tzdata)") from None
+    if vals["live_quote_mint"] != "So11111111111111111111111111111111111111112":
+        raise SettingsError("live_quote_mint must be SOL (So111...112): fees, the SOL reserve and P/L are computed in SOL")
     if vals["creator_check"] not in ("rugcheck", "off"):
         raise SettingsError("creator_check must be 'rugcheck' or 'off'")
     return Settings(raw=raw, sha256=digest, path=p, values=vals)

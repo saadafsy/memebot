@@ -44,6 +44,14 @@ class SellResult:
     tx_sig: str = ""
     error: str | None = None
     tokens_left_raw: int = 0
+    note: str = ""  # set when amounts are estimated; the engine alerts loudly
+
+
+UNKNOWN = "UNKNOWN OUTCOME"
+
+
+class UnknownOutcome(Exception):
+    """/execute did not give a clear answer. The swap may or may not have landed."""
 
 
 @dataclass
@@ -176,19 +184,22 @@ class LiveExecutor(_QuotingExecutor):
         try:
             res = await self.jup.execute(signed, order.request_id)
         except FetchError as e:
-            # Unknown outcome: leave the journal entry 'sent' so restart reconciliation checks the wallet.
-            log.error("execute %s %s: %s (outcome unknown, will reconcile)", side, name, e)
-            raise
+            # Unknown outcome: the journal entry stays 'sent' and the engine checks the wallet every tick.
+            log.error("execute %s %s: %s (outcome unknown, checking the wallet)", side, name, e)
+            raise UnknownOutcome(str(e)) from None
+        if not res.ok and str(res.raw.get("status", "")).lower() == "success":
+            log.error("execute %s %s: success without amounts (outcome unknown, checking the wallet)", side, name)
+            raise UnknownOutcome("success reported without amounts")
         self.data.journal({"id": jid, "status": "done" if res.ok else "failed", "side": side, "mint": mint,
                            "signature": res.signature, "in_raw": res.in_amount, "out_raw": res.out_amount,
                            "error": res.error})
         return res
 
-    async def _fee_usd(self, sig: str, q_usd: float) -> float:
+    async def _fee_usd(self, sig: str, sol_usd: float) -> float:
         lam = await self.rpc.tx_fee_lamports(sig) if sig else None
-        return (lam or 0) / 1e9 * q_usd
+        return (lam or 0) / 1e9 * sol_usd
 
-    async def buy(self, ctx: BuyContext, *, approved_plan: dict | None = None) -> BuyResult:
+    async def buy(self, ctx: BuyContext, *, may_proceed=None) -> BuyResult:
         try:
             sol = await self.rpc.sol_balance(self.owner)
         except FetchError as e:
@@ -196,8 +207,12 @@ class LiveExecutor(_QuotingExecutor):
         gate, order, d = await self.plan_buy(ctx, taker=self.owner, sol_balance=sol)
         if not gate.ok:
             return BuyResult(ok=False, error=gate.reason, extra=d)
+        if may_proceed is not None and not may_proceed():
+            return BuyResult(ok=False, error="entries were stopped or paused before signing; nothing bought", extra=d)
         try:
             res = await self._sign_and_execute(order, "buy", ctx.mint, ctx.name)
+        except UnknownOutcome as e:
+            return BuyResult(ok=False, error=f"{UNKNOWN}: {e}", extra=dict(d, unknown=True))
         except Exception as e:
             return BuyResult(ok=False, error=f"buy failed: {e}", extra=d)
         if not res.ok:
@@ -212,27 +227,39 @@ class LiveExecutor(_QuotingExecutor):
                          extra=d)
 
     async def sell(self, pos: dict, ref_price: float, reason: str) -> SellResult:
+        """Exits fail OPEN: a missing USD price never blocks a sell (it only affects the P/L record),
+        a failed balance read falls back to the stored amount, and slippage widens on each retry."""
         try:
             raw, dec = await self.rpc.token_balance(self.owner, pos["address"])
         except FetchError as e:
-            return SellResult(ok=False, error=f"could not read token balance: {e}")
+            raw, dec = int(pos.get("tokens_raw") or 0), await self.jup.decimals(pos["address"])
+            log.warning("balance read failed (%s); selling the stored amount", e)
+            if not raw or dec is None:
+                return SellResult(ok=False, error=f"could not read token balance: {e}")
+        est_tokens = raw / 10 ** dec if raw else float(pos.get("tokens_received") or 0)
         if raw <= 0:
-            return SellResult(ok=False, error="wallet holds none of this token (sold elsewhere?)")
-        q_usd = await self._quote_mint_usd()
-        q_dec = await self.jup.decimals(self.quote_mint)
-        if not q_usd or q_dec is None:
-            return SellResult(ok=False, error="could not read SOL price")
+            # Nothing left to sell: it was sold during an unclear /execute, or by hand. Close the position
+            # so it doesn't block a slot forever; amounts are estimated and flagged.
+            return SellResult(ok=True, fill_price=ref_price, usd_received=est_tokens * ref_price,
+                              note="wallet already held none of this token; exit price and amount estimated")
+        sol_usd = await self.jup.usd_price(SOL_MINT)
+        slip = min(2000, int(self.cfg["slippage_bps"] * (1 + int(pos.get("sell_failures", 0)))))
         try:
-            order = await self.jup.order(pos["address"], self.quote_mint, raw, taker=self.owner,
-                                         slippage_bps=self.cfg["slippage_bps"])
+            order = await self.jup.order(pos["address"], SOL_MINT, raw, taker=self.owner, slippage_bps=slip)
             res = await self._sign_and_execute(order, "sell", pos["address"], pos.get("name", ""))
+        except UnknownOutcome as e:
+            return SellResult(ok=False, error=f"{UNKNOWN}: {e}")
         except Exception as e:
             return SellResult(ok=False, error=f"sell failed: {e}")
         if not res.ok:
             return SellResult(ok=False, error=f"sell failed on-chain: {res.error}", tx_sig=res.signature)
         sold_ui = (res.in_amount or raw) / 10 ** dec
-        usd = res.out_amount / 10 ** q_dec * q_usd
-        fee = await self._fee_usd(res.signature, q_usd)
+        note = ""
+        if sol_usd:
+            usd = res.out_amount / 1e9 * sol_usd
+        else:
+            usd, note = sold_ui * ref_price, "SOL price unavailable; USD received estimated from the token price"
+        fee = await self._fee_usd(res.signature, sol_usd or 0.0)
         left = max(0, raw - (res.in_amount or raw))
         return SellResult(ok=True, fill_price=usd / sold_ui if sold_ui else 0.0, usd_received=usd,
-                          fee_usd=fee, tx_sig=res.signature, tokens_left_raw=left)
+                          fee_usd=fee, tx_sig=res.signature, tokens_left_raw=left, note=note)

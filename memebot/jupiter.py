@@ -102,6 +102,7 @@ class Jupiter:
         self.api_key = api_key
         self.base = base.rstrip("/")
         self._decimals: dict[str, int] = {SOL_MINT: 9}
+        self._last_usd: dict[str, float] = {}
 
     def _headers(self) -> dict:
         return {"x-api-key": self.api_key} if self.api_key else {}
@@ -150,9 +151,12 @@ class Jupiter:
                                    headers=self._headers(), label="jupiter price", retries=2)
         except FetchError as e:
             log.info("%s", e)
-            return None
+            return self._last_usd.get(mint)  # last good price (or None) beats blocking an exit
         try:
             v = float((d.get(mint) or {}).get("usdPrice"))
         except (TypeError, ValueError, AttributeError):
-            return None
-        return v if math.isfinite(v) and v > 0 else None
+            return self._last_usd.get(mint)
+        if math.isfinite(v) and v > 0:
+            self._last_usd[mint] = v
+            return v
+        return self._last_usd.get(mint)

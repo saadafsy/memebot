@@ -154,7 +154,17 @@ async def _fees(data: Path) -> int:
     return 0
 
 
+def _safe_console() -> None:
+    """Coin names often contain emoji; a Windows console or redirected log (cp1252) must never crash on them."""
+    for stream in (sys.stdout, sys.stderr):
+        try:
+            stream.reconfigure(errors="replace")
+        except (AttributeError, ValueError):
+            pass
+
+
 def main(argv: list[str] | None = None) -> int:
+    _safe_console()
     ap = argparse.ArgumentParser(prog="memebot", description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     ap.add_argument("command", choices=["init", "check", "run", "once", "report", "fees"])
     ap.add_argument("--data", default=os.environ.get("MEMEBOT_DATA", "data"), help="data folder (default ./data)")

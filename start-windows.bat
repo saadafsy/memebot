@@ -1,6 +1,8 @@
 @echo off
 REM Double-click to set up (first time) and start memebot in paper mode.
 cd /d "%~dp0"
+set PYTHONUTF8=1
+set PYTHONIOENCODING=utf-8
 where py >nul 2>nul && (set PY=py -3) || (set PY=python)
 if not exist .venv (
   echo Creating virtual environment...

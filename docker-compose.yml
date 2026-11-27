@@ -5,7 +5,12 @@ services:
     env_file: .env
     environment:
       PANEL_HOST: 0.0.0.0
+      # LIVE only: the wallet key comes from the shell that runs `docker compose up`, never from a file:
+      #   read -rs MEMEBOT_PRIVATE_KEY && export MEMEBOT_PRIVATE_KEY && docker compose up -d
+      MEMEBOT_PRIVATE_KEY: ${MEMEBOT_PRIVATE_KEY:-}
     ports:
       - "127.0.0.1:8787:8787"
     volumes:
       - ./data:/data
+      # mounted read-only so the bot can refuse to start if the wallet key was written into .env
+      - ./.env:/app/.env:ro
