@@ -17,7 +17,7 @@ For Saad and Jawad. What was built, what was checked and how, what was not teste
 | Ask (source) | Status |
 |---|---|
 | Bot that trades for him, controlled from Telegram (Snapchat) | Done: paper always on; real money separate, armed only on the computer |
-| Live executor on Jupiter Swap V2: order, sign, execute; keys from env; sell route before every buy; slippage and fees from settings; log signatures and fills (CLAUDE_CODE_PROMPT.md) | Built and mock-tested; live API shapes verified; **no real transaction sent** |
+| Live executor on Jupiter Swap V2: order, sign, execute; keys from env; sell route before every buy; slippage and fees from settings; log signatures and fills (CLAUDE_CODE_PROMPT.md) | Built and mock-tested; live API shapes verified; **no real transaction sent**. `live_trader.py` exposes `buy()`/`sell()` with the exact return dicts from his INTERFACE_CONTRACT.md |
 | Test on tiny amounts first | Left to Jawad (no money spent by request) |
 | Prompt A: print-only trade sheet with tests | Done: SHEET mode, verified on 10 real coins |
 | Prompt B: Start/Stop app, status, recent trades, read-only settings, localhost, README | Done (FastAPI rather than Flask, so one program runs everything) |
@@ -27,7 +27,7 @@ For Saad and Jawad. What was built, what was checked and how, what was not teste
 
 ## How it was checked
 
-* **99 automated tests** (`python -m pytest -q`), plus **Jawad's own 14 tests**, unchanged, against
+* **103 automated tests** (`python -m pytest -q`), plus **Jawad's own 14 tests**, unchanged, against
   his untouched `bot.py` (`python legacy/run_legacy_tests.py`). His original files are byte-identical
   to his manifest.
 * **Bug reproduction:** tests show 5 of the bot.py bugs reported earlier happen in his original file

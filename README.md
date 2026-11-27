@@ -20,9 +20,11 @@ strategy rules (from his `sim-bot`) with three modes behind one switch in `setti
 
 ```
 memebot/            the bot (engine, executors, Telegram bot, web panel + PWA)
+live_trader.py      Jawad's live-executor interface: buy()/sell() returning the dicts in his INTERFACE_CONTRACT.md
+app.py, commands.py the entry points named in Prompts B and C (same program as `python -m memebot run`)
 config/settings.json  Jawad's settings, byte-identical (sha256 b9f69186...)
 legacy/             Jawad's original files, untouched, plus a runner for his test_bot.py
-tests/              99 automated tests (pytest)
+tests/              103 automated tests (pytest)
 deploy/             systemd unit for an always-on Linux box
 Dockerfile, docker-compose.yml
 start-windows.bat, start-mac-linux.sh
@@ -221,7 +223,7 @@ Optional keys this version adds (all have defaults; add them only to change them
 
 ```bash
 pip install -r requirements-dev.txt
-python -m pytest -q                  # 99 tests
+python -m pytest -q                  # 103 tests
 python legacy/run_legacy_tests.py    # Jawad's original 14 tests against his original bot.py
 ```
 
