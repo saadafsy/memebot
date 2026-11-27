@@ -79,6 +79,9 @@ $0.15 to $0.61 in quotes, about **$0.45 to $0.90 all-in** with network fees and 
 (2% to 4.5%). $1.80 (9%) is 2 to 4 times too high, but works as a safety buffer. Per Jawad, $1.80 stays
 for the current run, and every paper trade also logs `quoted_fee_usd` and `net_pnl_quoted` so both can
 be compared. The backtest loses money before any fee, so fees are not the main problem.
+The raw quotes (amounts, price impact, fee bps, router and request id for each coin, both directions)
+are saved in `research/fee_quotes_2026-11-27.json`, with a readable table in
+`research/fee_check_2026-11-27.md`.
 
 ## Not tested
 

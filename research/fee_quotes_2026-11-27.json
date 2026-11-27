@@ -1,0 +1,285 @@
+{
+  "measured_at_utc": "2026-11-27T20:46:08+00:00 to 2026-11-27T20:46:59+00:00",
+  "sol_usd": {
+    "price": 71.948,
+    "source": "Jupiter Price API v3 (api.jup.ag/price/v3, keyless)"
+  },
+  "method": "Keyless GET https://api.jup.ag/swap/v2/order, no taker (quote only, no transaction), no slippageBps. Buy: SOL->token for $20 of SOL (277978612 lamports). Sell: token->SOL for the exact buy outAmount. roundtrip_cost_usd = 20 - sell.outAmount(lamports)/1e9*sol_usd. Back-to-back quotes ~2.2 s apart; excludes execution slippage, price movement, network fees and rent. priceImpact is percent; priceImpactPct is a deprecated fraction string. feeBps is Jupiter's fee (assumed already deducted from outAmount; not independently verified). dexscreener_liquidity_usd = highest-liquidity Solana pair where the mint is baseToken. rugcheck = memebot creator_history() result from 2026-11-27 ~20:20 UTC.",
+  "coins": [
+    {
+      "name": "JOB",
+      "mint": "9Pq7aLAbhDG2tTnS22cm6kuysZVcZpLFE368HWuypump",
+      "dex": "pumpswap",
+      "dexscreener_liquidity_usd": 156481.67,
+      "rugcheck": "rugcheck_ok(score=1)",
+      "buy": {
+        "inAmount": "277978612",
+        "outAmount": "9411883980",
+        "priceImpact": -0.2394350174797921,
+        "priceImpactPct": "-0.002394350174797921",
+        "feeBps": 10,
+        "router": "metis",
+        "requestId": "01a21ec2-2b94-7399-90f6-141da1317a34"
+      },
+      "sell": {
+        "inAmount": "9411883980",
+        "outAmount": "272704395",
+        "priceImpact": -1.661890462770325,
+        "priceImpactPct": "-0.01661890462770325",
+        "feeBps": 10,
+        "router": "metis",
+        "requestId": "01a21ec2-34f6-708c-a10f-64c9dad9832e"
+      },
+      "roundtrip_cost_usd": 0.3795,
+      "roundtrip_cost_pct": 1.897
+    },
+    {
+      "name": "CHRLE",
+      "mint": "G1ij1UjWBcUFtVHz5GVDAopPNMQcbwtdegH94LU6Jray",
+      "dex": "raydium",
+      "dexscreener_liquidity_usd": 46263.25,
+      "rugcheck": "rugcheck_ok(score=1)",
+      "buy": {
+        "inAmount": "277978612",
+        "outAmount": "49729057478",
+        "priceImpact": -0.561554285701955,
+        "priceImpactPct": "-0.00561554285701955",
+        "feeBps": 10,
+        "router": "metis",
+        "requestId": "01a21ec2-3e95-7555-b202-152a9457a724"
+      },
+      "sell": {
+        "inAmount": "49729057478",
+        "outAmount": "275286773",
+        "priceImpact": -0.4199687129569884,
+        "priceImpactPct": "-0.004199687129569884",
+        "feeBps": 10,
+        "router": "metis",
+        "requestId": "01a21ec2-47dd-7358-8907-c654471ae7c4"
+      },
+      "roundtrip_cost_usd": 0.1937,
+      "roundtrip_cost_pct": 0.968
+    },
+    {
+      "name": "$XMAS",
+      "mint": "7ACq9bgHPCT33TWC6yaxLX5CfNQBbFachy9xKD7Spump",
+      "dex": "pumpswap",
+      "dexscreener_liquidity_usd": 20673.1,
+      "rugcheck": "rugcheck_danger:Creator history of rugged tokens",
+      "buy": {
+        "inAmount": "277978612",
+        "outAmount": "213419428057",
+        "priceImpact": -2.1252816027534873,
+        "priceImpactPct": "-0.021252816027534874",
+        "feeBps": 10,
+        "router": "metis",
+        "requestId": "01a21ec2-5127-7609-9aed-f6479d0545b0"
+      },
+      "sell": {
+        "inAmount": "213419428057",
+        "outAmount": "269874529",
+        "priceImpact": -0.8072365101868628,
+        "priceImpactPct": "-0.008072365101868628",
+        "feeBps": 10,
+        "router": "metis",
+        "requestId": "01a21ec2-5a92-717f-b5f0-b9677cee4271"
+      },
+      "roundtrip_cost_usd": 0.5831,
+      "roundtrip_cost_pct": 2.915
+    },
+    {
+      "name": "Fireball",
+      "mint": "B9wbjDJ4FbHMsZmoXAkJSTAwuePaJUKbySvnK5zApump",
+      "dex": "pumpswap",
+      "dexscreener_liquidity_usd": 44120,
+      "rugcheck": "rugcheck_ok(score=1)",
+      "buy": {
+        "inAmount": "277978612",
+        "outAmount": "51449614794",
+        "priceImpact": -0.8902401600285027,
+        "priceImpactPct": "-0.008902401600285027",
+        "feeBps": 10,
+        "router": "okx",
+        "requestId": "01a21ec2-63d8-72aa-990a-9ff42c09446e"
+      },
+      "sell": {
+        "inAmount": "51449614794",
+        "outAmount": "272621318",
+        "priceImpact": -1.0463069292279472,
+        "priceImpactPct": "-0.010463069292279472",
+        "feeBps": 10,
+        "router": "metis",
+        "requestId": "01a21ec2-6d1d-72f9-b8e4-4ad0a05ab893"
+      },
+      "roundtrip_cost_usd": 0.3854,
+      "roundtrip_cost_pct": 1.927
+    },
+    {
+      "name": "Rizzmas",
+      "mint": "85cQsFgbi8mBZxiPppbpPXuV7j1hA8tBwhjF4gKW6mHg",
+      "dex": "raydium",
+      "dexscreener_liquidity_usd": 226862.71,
+      "rugcheck": "rugcheck_ok(score=7)",
+      "buy": {
+        "inAmount": "277978612",
+        "outAmount": "14761097981324",
+        "priceImpact": -0.03452324818075967,
+        "priceImpactPct": "-0.0003452324818075967",
+        "feeBps": 10,
+        "router": "metis",
+        "requestId": "01a21ec2-76a7-75f9-a29e-c15d7aae0ea0"
+      },
+      "sell": {
+        "inAmount": "14761097981324",
+        "outAmount": "275940458",
+        "priceImpact": -0.6989233730699378,
+        "priceImpactPct": "-0.006989233730699378",
+        "feeBps": 10,
+        "router": "metis",
+        "requestId": "01a21ec2-7ff1-7386-9bbd-78af823a5941"
+      },
+      "roundtrip_cost_usd": 0.1466,
+      "roundtrip_cost_pct": 0.733
+    },
+    {
+      "name": "PumpMas",
+      "mint": "EwUVBpdM5vw1CJHRMSLywzVjyQSJZpy6qboxEPBKpump",
+      "dex": "pumpswap",
+      "dexscreener_liquidity_usd": 27471.5,
+      "rugcheck": "rugcheck_ok(score=1)",
+      "buy": {
+        "inAmount": "277978612",
+        "outAmount": "138751028041",
+        "priceImpact": -0.37134179012509955,
+        "priceImpactPct": "-0.0037134179012509954",
+        "feeBps": 10,
+        "router": "metis",
+        "requestId": "01a21ec2-893d-741c-aef4-73f07b888735"
+      },
+      "sell": {
+        "inAmount": "138751028041",
+        "outAmount": "270367786",
+        "priceImpact": -2.392736777679506,
+        "priceImpactPct": "-0.02392736777679506",
+        "feeBps": 10,
+        "router": "metis",
+        "requestId": "01a21ec2-9283-760b-b231-c7b79904504f"
+      },
+      "roundtrip_cost_usd": 0.5476,
+      "roundtrip_cost_pct": 2.738
+    },
+    {
+      "name": "enu",
+      "mint": "9msLfYfXBrSbrApCZAPuPMCNmPqNtEL1VPKh1AEYpump",
+      "dex": "pumpswap",
+      "dexscreener_liquidity_usd": 39020.91,
+      "rugcheck": "rugcheck_ok(score=1)",
+      "buy": {
+        "inAmount": "277978612",
+        "outAmount": "73329930422",
+        "priceImpact": -0.11348092459334906,
+        "priceImpactPct": "-0.0011348092459334907",
+        "feeBps": 10,
+        "router": "metis",
+        "requestId": "01a21ec2-9c26-769c-90b9-a7407f0d8f85"
+      },
+      "sell": {
+        "inAmount": "73329930422",
+        "outAmount": "271141180",
+        "priceImpact": -2.3488817592333655,
+        "priceImpactPct": "-0.023488817592333656",
+        "feeBps": 10,
+        "router": "metis",
+        "requestId": "01a21ec2-a571-773a-b94d-94643bd3c4bd"
+      },
+      "roundtrip_cost_usd": 0.4919,
+      "roundtrip_cost_pct": 2.46
+    },
+    {
+      "name": "ROCKET",
+      "mint": "6C9r2gzu8Pr54hTevHo3x5gSj9JqtpApj7obJnrtpump",
+      "dex": "pumpswap",
+      "dexscreener_liquidity_usd": 87165.19,
+      "rugcheck": "rugcheck_ok(score=1)",
+      "buy": {
+        "inAmount": "277978612",
+        "outAmount": "23841682769",
+        "priceImpact": 0.7546043707659044,
+        "priceImpactPct": "0.007546043707659044",
+        "feeBps": 10,
+        "router": "metis",
+        "requestId": "01a21ec2-aee6-7189-a264-9b92f1ce3d30"
+      },
+      "sell": {
+        "inAmount": "23841682769",
+        "outAmount": "269527554",
+        "priceImpact": -3.766366026207055,
+        "priceImpactPct": "-0.03766366026207055",
+        "feeBps": 10,
+        "router": "metis",
+        "requestId": "01a21ec2-b863-76ba-8a9b-5ddfc619f003"
+      },
+      "roundtrip_cost_usd": 0.608,
+      "roundtrip_cost_pct": 3.04
+    },
+    {
+      "name": "CINU",
+      "mint": "CvXQ9qEriGgTbMWyF8L1U7oqn9ev8A49N1dzNE8cpump",
+      "dex": "pumpswap",
+      "dexscreener_liquidity_usd": 41796.82,
+      "rugcheck": "rugcheck_ok(score=1)",
+      "buy": {
+        "inAmount": "277978612",
+        "outAmount": "94125733337",
+        "priceImpact": 0.8399954647599226,
+        "priceImpactPct": "0.008399954647599225",
+        "feeBps": 10,
+        "router": "okx",
+        "requestId": "01a21ec2-c1a9-7008-b932-816c1359e49c"
+      },
+      "sell": {
+        "inAmount": "94125733337",
+        "outAmount": "273887150",
+        "priceImpact": -2.340662844011635,
+        "priceImpactPct": "-0.02340662844011635",
+        "feeBps": 10,
+        "router": "okx",
+        "requestId": "01a21ec2-caef-75d8-8298-7e90041e0c92"
+      },
+      "roundtrip_cost_usd": 0.2944,
+      "roundtrip_cost_pct": 1.472
+    },
+    {
+      "name": "CBUCKS",
+      "mint": "DtcicPCKTKeAh7TDEzTym3hXeoHAoMiBdYJhMYxZpump",
+      "dex": "pumpswap",
+      "dexscreener_liquidity_usd": 291356.48,
+      "rugcheck": "rugcheck_ok(score=1)",
+      "buy": {
+        "inAmount": "277978612",
+        "outAmount": "2964139784",
+        "priceImpact": -1.6057710739349078,
+        "priceImpactPct": "-0.016057710739349078",
+        "feeBps": 10,
+        "router": "metis",
+        "requestId": "01a21ec2-d432-770f-a2a4-2ab6488899ea"
+      },
+      "sell": {
+        "inAmount": "2964139784",
+        "outAmount": "273142597",
+        "priceImpact": -0.1361223248307578,
+        "priceImpactPct": "-0.0013612232483075782",
+        "feeBps": 10,
+        "router": "metis",
+        "requestId": "01a21ec2-dd82-7750-8d16-3de827830a8c"
+      },
+      "roundtrip_cost_usd": 0.3479,
+      "roundtrip_cost_pct": 1.74
+    }
+  ],
+  "network_fees": {
+    "base_lamports_per_signature": 5000,
+    "token_account_rent_sol": 0.00203928,
+    "notes": "Base fee 5000 lamports per signature (~$0.00036). Priority fee is set by Jupiter when a taker is given (estimate, not measured here: typically 0.00001-0.001 SOL); not in these quotes because there was no taker (signatureFeeLamports/prioritizationFeeLamports/rentFeeLamports were 0). Token-account rent is paid on the first buy of a token and refunded only if the account is closed after selling."
+  }
+}
