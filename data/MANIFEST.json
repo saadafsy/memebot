@@ -1,5 +1,5 @@
 {
- "built_utc": "2026-11-27T23:38:53Z",
+ "built_utc": "2026-11-27T23:55:55Z",
  "tables": {
   "forward_pools": {
    "rows": 1503,
@@ -8,10 +8,10 @@
    "sha256": "812515ab26e59edf"
   },
   "forward_snapshots": {
-   "rows": 13727,
+   "rows": 16144,
    "bad_lines": 0,
    "sources": 1,
-   "sha256": "f3a63777da006452"
+   "sha256": "83f9faba8e01ebea"
   },
   "backfill_SURVIVORSHIP_BIASED_pools": {
    "rows": 239,
@@ -20,14 +20,14 @@
    "sha256": "59b983b907df1720"
   },
   "backfill_SURVIVORSHIP_BIASED_ohlcv_1m": {
-   "rows": 231577,
-   "pools": 73
+   "rows": 303541,
+   "pools": 82
   },
   "pumpportal_events": {
-   "rows": 788,
+   "rows": 920,
    "bad_lines": 0,
    "sources": 2,
-   "sha256": "3d1a930fdbfe830f"
+   "sha256": "c6bf383ea8457c82"
   }
  },
  "errors": [],
