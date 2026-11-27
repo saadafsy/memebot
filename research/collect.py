@@ -32,7 +32,10 @@ GT = "https://api.geckoterminal.com/api/v2"
 # from the environment only (CG_API_KEY) and sent as a header, never written to disk or logs.
 CG_KEY = os.environ.get("CG_API_KEY", "").strip()
 CG_PRO = os.environ.get("CG_API_PLAN", "demo").strip().lower() == "pro"
-if CG_KEY:
+# CG_VIA_PROXY=1: the key is stored as a network secret and the sandbox proxy adds the header, so this
+# process never sees it. Use CoinGecko's base URL without sending a key ourselves.
+CG_PROXY = os.environ.get("CG_VIA_PROXY", "").strip() in ("1", "true", "yes")
+if CG_KEY or CG_PROXY:
     GT = ("https://pro-api.coingecko.com" if CG_PRO else "https://api.coingecko.com") + "/api/v3/onchain"
 DS = "https://api.dexscreener.com"
 HDR = {"Accept": "application/json;version=20230302", "User-Agent": "memebot-research/1.0"}
@@ -170,8 +173,11 @@ def main() -> int:
     a = ap.parse_args()
     out = Path(a.out)
     (out / "ohlcv").mkdir(parents=True, exist_ok=True)
-    gt_pace, ds_pace = Paced(2.2 if CG_KEY else 12.0), Paced(0.25)
-    print(f"on-chain data source: {'CoinGecko API (key from CG_API_KEY)' if CG_KEY else 'GeckoTerminal keyless'}", flush=True)
+    keyed = bool(CG_KEY or CG_PROXY)
+    gt_pace, ds_pace = Paced(2.2 if keyed else 12.0), Paced(0.25)
+    src = ("CoinGecko API (key from CG_API_KEY)" if CG_KEY else "CoinGecko API (key added by the proxy)"
+           if CG_PROXY else "GeckoTerminal keyless")
+    print(f"on-chain data source: {src}", flush=True)
     seen = load_seen(out)
     with httpx.Client() as client:
         if not a.ohlcv_only:
