@@ -257,3 +257,27 @@ async def test_max_open_leaves_a_skip_row(cfg, data, market, notifier):
     reasons = [r["reason"] for r in data.read_csv(data.skips_path)]
     assert reasons.count("max open positions reached (5)") == 2
     assert e.state["open"][0]["tp"] == 1.3 and e.state["open"][0]["sl"] == 0.85
+
+
+async def test_bug7_exits_checked_every_exit_poll_not_every_scan(cfg, data, market, notifier):
+    """bot.py checked exits only every poll_seconds (300 s). Exits now run every tick
+    (exit_poll_seconds, 15 s) while new-entry scans still follow poll_seconds."""
+    e = make(cfg, data, market, notifier)
+    write_watch(data, [row("A")], {"A": "ENTRY OK"})
+    market.set("A", 1.0)
+    await e.tick(mono_now=0.0)  # scan at t=0 opens A
+    assert len(e.state["open"]) == 1 and e._next_scan == cfg["poll_seconds"]
+    scans = []
+    orig = e.scan
+
+    async def counting_scan():
+        scans.append(1)
+        await orig()
+
+    e.scan = counting_scan
+    market.set("A", 0.84)
+    await e.tick(mono_now=15.0)  # 15 s later: no scan due, but the stop-loss fires
+    assert e.state["open"] == [] and scans == []
+    await e.tick(mono_now=300.0)
+    assert scans == [1]
+    assert cfg["exit_poll_seconds"] == 15 and cfg["poll_seconds"] == 300

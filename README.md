@@ -24,7 +24,7 @@ live_trader.py      Jawad's live-executor interface: buy()/sell() returning the 
 app.py, commands.py the entry points named in Prompts B and C (same program as `python -m memebot run`)
 config/settings.json  Jawad's settings, byte-identical (sha256 b9f69186...)
 legacy/             Jawad's original files, untouched, plus a runner for his test_bot.py
-tests/              103 automated tests (pytest)
+tests/              107 automated tests (pytest)
 deploy/             systemd unit for an always-on Linux box
 Dockerfile, docker-compose.yml
 start-windows.bat, start-mac-linux.sh
@@ -58,6 +58,10 @@ python -m venv .venv
 
 Other commands: `once` (one cycle then exit, like `bot.py --once`), `report` (like `bot.py report`),
 `fees` (measures the real cost of a round trip for each watchlist coin with Jupiter quotes; no trade).
+
+Already running Jawad's old sim-bot? Carry on its count instead of starting at 0/100:
+`python -m memebot import --from /path/to/sim-bot --data data` (and `--from /path/to/sim-fast --data data-fast`
+for the fast lane). See REPORT.md.
 
 Put the Scout's `watchlist.csv` and the Auditor's `auditor_verdicts.csv` in the data folder.
 Without a verdicts file the bot opens nothing (fail-closed), exactly like `bot.py`.
@@ -223,7 +227,7 @@ Optional keys this version adds (all have defaults; add them only to change them
 
 ```bash
 pip install -r requirements-dev.txt
-python -m pytest -q                  # 103 tests
+python -m pytest -q                  # 107 tests
 python legacy/run_legacy_tests.py    # Jawad's original 14 tests against his original bot.py
 ```
 

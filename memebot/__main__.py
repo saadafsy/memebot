@@ -1,6 +1,7 @@
 """Command line.
 
   python -m memebot init    [--data DIR]   create the data folder with Jawad's settings.json
+  python -m memebot import  --from SIMBOT [--data DIR]   carry on an existing sim-bot / sim-fast run
   python -m memebot check   [--data DIR]   validate settings + env, test read-only API access
   python -m memebot run     [--data DIR]   run everything (engine + Telegram + panel)
   python -m memebot once    [--data DIR]   one manage + scan cycle, then exit (like bot.py --once)
@@ -55,6 +56,46 @@ def cmd_init(data: Path) -> int:
         if not p.exists():
             p.write_text(header, encoding="utf-8")
             print(f"Created empty {p} (the Scout/Auditor fill this in).")
+    return 0
+
+
+IMPORT_FILES = ("settings.json", "state.json", "trades.csv", "skipped.csv", "watchlist.csv",
+                "auditor_verdicts.csv", "alerts.log", "audit_log.csv")
+
+
+def cmd_import(src: Path, data: Path) -> int:
+    """Copy an existing sim-bot / sim-fast folder into a new data folder so the count, open positions,
+    cooldowns and today's P/L carry on. The source folder is only read, never changed."""
+    from .storage import DataDir, StateCorrupt
+
+    src = src.resolve()
+    if not (src / "settings.json").exists():
+        print(f"{src} has no settings.json; is that the sim-bot folder?", file=sys.stderr)
+        return 2
+    data.mkdir(parents=True, exist_ok=True)
+    clash = [n for n in ("state.json", "trades.csv") if (data / n).exists() and (data / n).stat().st_size > 0]
+    if clash:
+        print(f"{data} already has {', '.join(clash)}; refusing to overwrite. Use an empty folder.", file=sys.stderr)
+        return 2
+    print("Stop the old bot first, so its state.json is not changing while it is copied.")
+    copied = []
+    for name in IMPORT_FILES:
+        if (src / name).exists():
+            shutil.copy2(src / name, data / name)
+            copied.append(name)
+    try:
+        cfg = load_settings(data / "settings.json")
+        d = DataDir(data)
+        st = d.load_state()
+    except (SettingsError, StateCorrupt) as e:
+        print(f"Imported files did not validate: {e}", file=sys.stderr)
+        return 2
+    n_closed = len(d.read_csv(d.trades_path))
+    print(f"Imported {', '.join(copied)} from {src}")
+    print(f"settings sha256 {cfg.sha256[:8]} (lane {cfg['lane']}, time exit {cfg['time_exit_hours']}h)")
+    print(f"closed trades: {n_closed}/{cfg['target_closed_trades']}   open positions: {len(st['open'])}   "
+          f"today's P/L: {float(st.get('day_pnl', 0)):+.2f}")
+    print(f"Start it with: python -m memebot run --data {data}")
     return 0
 
 
@@ -162,7 +203,8 @@ def _safe_console() -> None:
 def main(argv: list[str] | None = None) -> int:
     _safe_console()
     ap = argparse.ArgumentParser(prog="memebot", description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
-    ap.add_argument("command", choices=["init", "check", "run", "once", "report", "fees"])
+    ap.add_argument("command", choices=["init", "import", "check", "run", "once", "report", "fees"])
+    ap.add_argument("--from", dest="src", help="import: the existing sim-bot (or sim-fast) folder to copy from")
     ap.add_argument("--data", default=os.environ.get("MEMEBOT_DATA", "data"), help="data folder (default ./data)")
     ap.add_argument("--no-telegram", action="store_true")
     ap.add_argument("--no-panel", action="store_true")
@@ -176,6 +218,11 @@ def main(argv: list[str] | None = None) -> int:
     setup_logging(data if data.exists() else None, env.secrets(), logging.DEBUG if a.verbose else logging.INFO)
     if a.command == "init":
         return cmd_init(data)
+    if a.command == "import":
+        if not a.src:
+            print("import needs --from /path/to/sim-bot", file=sys.stderr)
+            return 2
+        return cmd_import(Path(a.src), data)
     if a.command == "report":
         return cmd_report(data)
     if a.command == "check":

@@ -27,7 +27,7 @@ For Saad and Jawad. What was built, what was checked and how, what was not teste
 
 ## How it was checked
 
-* **103 automated tests** (`python -m pytest -q`), plus **Jawad's own 14 tests**, unchanged, against
+* **107 automated tests** (`python -m pytest -q`), plus **Jawad's own 14 tests**, unchanged, against
   his untouched `bot.py` (`python legacy/run_legacy_tests.py`). His original files are byte-identical
   to his manifest.
 * **Bug reproduction:** tests show 5 of the bot.py bugs reported earlier happen in his original file
@@ -41,6 +41,36 @@ For Saad and Jawad. What was built, what was checked and how, what was not teste
   keys): Jupiter Swap V2, price and token APIs, DexScreener and RugCheck match the code. End-to-end
   run on 10 real coins in paper and trade-sheet modes, plus the panel, with no errors. Its 6 smaller
   findings were fixed.
+
+## The 7 bot.py bugs: fixed, and the test for each
+
+Each row has a test proving the bug exists in Jawad's untouched `legacy/sim-bot/bot.py`
+(`tests/test_legacy_bugs.py`) where it can be reproduced in code, and a test proving the new bot
+handles it.
+
+| # | bot.py bug | Shown in the original by | Fixed and tested by |
+|---|---|---|---|
+| 1 | A dropped connection (reset / remote disconnect) crashes the bot; the loop has no error handling | `test_bug1_connection_reset_escapes_fetch_price` | `test_network_down_never_raises_raw_exception`, `test_retry_on_429_with_retry_after_and_reset`, `test_loop_survives_exceptions` |
+| 2 | No price means the 24 h time exit never fires; the position stays open forever | `test_bug2_time_exit_never_fires_without_price` | `test_bug2_time_exit_fires_even_without_price`, `test_bug2_time_exit_waits_for_grace_when_unpriced` |
+| 3 | Pairs where the coin is the quote token are used, so it can read another coin's price | `test_bug3_quote_token_pair_price_used` | `test_best_pairs_requires_base_token` |
+| 4 | LIVE reprints the same trade sheet every scan | visible in `open_position()`: it prints and returns with no record | `test_bug4_sheet_printed_once_per_day`, `test_sheet_blocked_verdict_gets_no_sign_alert` |
+| 5 | Skip reasons with changing numbers break the once-a-day dedupe; skipped.csv grows every scan | `test_bug5_skip_dedupe_breaks_on_changing_numbers` | `test_bug5_skip_dedupe_ignores_changing_numbers` |
+| 6 | Naive local timestamps, so deadlines shift across a daylight-saving change | `test_bug6_naive_timestamps` | `test_naive_legacy_timestamps_and_dst`, `test_legacy_state_with_naive_timestamps` |
+| 7 | Exits checked only every 300 s, so paper stop-loss fills look better than real ones | `poll_seconds: 300` drives both scans and exits in `main()` | `test_bug7_exits_checked_every_exit_poll_not_every_scan` (exits every 15 s, scans every 300 s) |
+
+## Carrying on the existing paper runs
+
+The new bot does not have to start at 0/100. Stop the old bot, then:
+
+```bash
+python -m memebot import --from /path/to/sim-bot  --data data        # MAIN SIM
+python -m memebot import --from /path/to/sim-fast --data data-fast   # FAST LANE (4 h exit)
+```
+
+This copies settings.json, state.json (open positions, cooldowns, today's P/L), trades.csv, skipped.csv,
+watchlist.csv, auditor_verdicts.csv, alerts.log and audit_log.csv. The source folders are only read.
+It refuses to overwrite a folder that already has trades or state, and refuses a corrupt state.json.
+Old timestamps without a timezone are read as Toronto time. Tested in `tests/test_import.py`.
 
 ## The $1.80 fee
 
