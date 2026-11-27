@@ -146,3 +146,30 @@ def test_pumpportal_join_and_boost_filter(tmp_path):
     assert boost_filtered(600, 0.5).fn(p) == 0          # organic-looking graduate: enter
     assert boost_filtered(600, 0.2).fn(p) is None       # creator bought too much
     assert boost_filtered(1000, 2.0).fn(p) is None      # graduated too fast
+
+
+def test_coin_that_dies_right_after_entry_stays_in_and_loses():
+    """No survivorship inside the backtest: a coin with one or two candles that stops trading is entered
+    at its last price and closed at the dead-pool haircut, a loss, instead of being skipped."""
+    from research.backtest import DEAD_HAIRCUT
+    p = pool([[1, 1, 1, 1]])
+    p.meta["dead_end"] = True
+    ex = Exit(tp=0.3, sl=0.15)
+    tr = simulate(p, 0, ex, ZERO)
+    assert tr is not None and tr.reason == "dead" and tr.exit_px == pytest.approx(DEAD_HAIRCUT)
+    assert tr.net_usd < 0
+    fast = simulate_many(p, 0, [ex], ZERO)
+    assert fast[0][0] == pytest.approx(tr.net_usd) and fast[0][1] == "dead"
+
+
+def test_gap_after_signal_fills_at_last_price_and_matches_fast_path():
+    a = np.asarray([[1, 1, 1, 1], [1, 1, 1, 1.2], [0.5, 0.5, 0.4, 0.45]], float)
+    t = np.array([0, 60, 3600]) + 1_000_000  # 58 minutes with no trades after the signal
+    p = Pool("P", "", int(t[0]), t, a[:, 0], a[:, 1], a[:, 2], a[:, 3], np.full(3, 100.0),
+             np.full(3, 50_000.0), np.full(3, np.nan), np.full(3, np.nan))
+    for ex in (Exit(tp=0.3, sl=0.15), Exit(tp=None, sl=0.5, max_min=30)):
+        tr = simulate(p, 1, ex, ZERO)
+        assert tr.entry_px == 1.2
+        fast = simulate_many(p, 1, [ex], ZERO)[0]
+        assert fast[0] == pytest.approx(tr.net_usd) and fast[1] == tr.reason
+    assert simulate(p, 1, Exit(tp=0.3, sl=0.15), ZERO).exit_px == 0.5  # gapped through the stop

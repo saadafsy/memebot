@@ -50,7 +50,7 @@ def _liq_ok(p: Pool, i: int, min_liq: float) -> bool:
 def baseline(min_age: float, min_liq: float):
     def fn(p: Pool):
         age = _age_min(p)
-        for i in range(p.n - 1):
+        for i in range(p.n):
             if age[i] >= min_age and _liq_ok(p, i, min_liq):
                 return i
         return None
@@ -62,7 +62,7 @@ def early(max_age: float, max_runup: float, min_liq: float):
     def fn(p: Pool):
         age = _age_min(p)
         first = p.o[0]
-        for i in range(p.n - 1):
+        for i in range(p.n):
             if age[i] > max_age:
                 return None
             if p.c[i] / first - 1 <= max_runup and _liq_ok(p, i, min_liq):
@@ -154,7 +154,7 @@ def boost_window(max_age_min: float, min_liq: float):
         if "pumpswap" not in (p.dex or ""):
             return None
         age = _age_min(p)
-        for i in range(p.n - 1):
+        for i in range(p.n):
             if age[i] > max_age_min:
                 return None
             if _liq_ok(p, i, min_liq):
@@ -176,7 +176,7 @@ def boost_filtered(min_secs_to_migrate: float, max_creator_sol: float):
         if secs < min_secs_to_migrate or csol > max_creator_sol:
             return None
         age = _age_min(p)
-        for i in range(p.n - 1):
+        for i in range(p.n):
             if age[i] > 2:
                 return None
             return i
@@ -207,7 +207,7 @@ def graduate_hold(min_age: float, max_age: float, min_ratio: float):
 def random_entry(seed: int, min_liq: float):
     def fn(p: Pool):
         rng = np.random.default_rng(zlib.crc32(f"{p.pool}:{seed}".encode()))  # stable across runs
-        ok = [i for i in range(p.n - 1) if _liq_ok(p, i, min_liq)]
+        ok = [i for i in range(p.n) if _liq_ok(p, i, min_liq)]
         return int(rng.choice(ok)) if ok else None
     return Entry("random", (seed, min_liq), fn)
 

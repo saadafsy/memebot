@@ -91,7 +91,8 @@ def main(argv=None) -> int:
     ap = argparse.ArgumentParser()
     ap.add_argument("--data", default="research/data")
     ap.add_argument("--out", default="research/results")
-    ap.add_argument("--min-candles", type=int, default=10)
+    ap.add_argument("--min-candles", type=int, default=1,
+                    help="keep at 1: a higher value drops coins that died in minutes (survivorship bias)")
     ap.add_argument("--min-train", type=int, default=30)
     ap.add_argument("--min-test", type=int, default=30)
     ap.add_argument("--top", type=int, default=25)
@@ -173,6 +174,8 @@ def main(argv=None) -> int:
                          "trading, never proof of an edge") if span_h < 24 else "full run",
                "data_span_hours": round(span_h, 2), "variants_tested": len(table),
                "dead_pools": sum(1 for p in pools if p.meta.get("dead_end")),
+               "min_candles": a.min_candles,
+               "pools_under_10_candles": sum(1 for p in pools if p.n < 10),
                "pools_with_pumpportal_launch_data": sum(1 for p in pools if p.meta.get("pp_creator_sol") is not None),
                "venues": dict(_C(p.dex for p in pools)), "dex_filter": a.dex, "pools": len(pools), "train_pools": int(len(pools) * 0.6), "strategies": len(table),
                "candidates_considered": len(cands), "pbo": pbo, "families": fam,

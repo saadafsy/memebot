@@ -17,8 +17,12 @@ How the strategy matrix is tested, and why each rule is there. Code: `collect.py
 
 ## Execution model (conservative on purpose)
 
-* Signal on candle *t*'s close; fill at candle *t+1*'s open. No fill if the next candle is more than
-  2 minutes later.
+* Signal on candle *t*'s close; fill at candle *t+1*'s open. If nobody traded in the next minute, the
+  pool still quotes its last price, so the buy fills at candle *t*'s close (our buy is the next trade).
+* **No minimum candle count.** Most fresh pump.fun launches trade for 1-3 minutes and die. Requiring 10
+  candles (the first early look did) silently drops exactly those coins, which is survivorship bias
+  inside the backtest. Every pool stays in; a coin that stops trading after entry closes at the
+  dead-pool price below, a loss.
 * Same-candle stop and target: the stop wins. A candle opening through the stop fills at the open.
 * Trailing stops use only highs from earlier candles.
 * A trade still open when the data ends exits at the last traded price (for a dead pool, the post-rug

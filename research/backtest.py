@@ -95,7 +95,7 @@ def load_pumpportal(pp_dir: str | Path | None) -> dict[str, dict]:
     return out
 
 
-def load_pools(data_dir: str | Path, min_candles: int = 10, pp_dir: str | Path | None = None) -> list[Pool]:
+def load_pools(data_dir: str | Path, min_candles: int = 1, pp_dir: str | Path | None = None) -> list[Pool]:
     d = Path(data_dir)
     pp = load_pumpportal(pp_dir)
     meta = {}
@@ -222,25 +222,30 @@ class Trade:
 def simulate(p: Pool, i_sig: int, ex: Exit, costs: Costs) -> Trade | None:
     """Signal at the close of candle i_sig; enter at the open of i_sig+1."""
     i0 = i_sig + 1
-    if i0 >= p.n:
-        return None
-    # Only enter if the next candle is really the next minute (a gap means no trades: no fill possible).
-    if p.t[i0] - p.t[i_sig] > 120:
-        return None
     liq0 = p.liq[i_sig]
     if liq0 == liq0 and liq0 < 100 * SIZE_USD:
         return None  # position would be more than 1% of the pool
     side_in = costs.side(liq0, p.dex, p.fdv)
-    px_in = p.o[i0]
+    if i0 < p.n and p.t[i0] - p.t[i_sig] <= 120:
+        px_in, t_in, j0 = p.o[i0], p.t[i0], i0
+    else:
+        # No trade in the next minute: an AMM or bonding curve still quotes the last price, so the buy
+        # fills at the signal candle's close (our own buy would be the next trade). This keeps coins that
+        # die right after launch IN the sample, where they count as losses; dropping them would be
+        # survivorship bias inside the backtest.
+        px_in, t_in, j0 = p.c[i_sig], p.t[i_sig] + 60, i0
     if not (px_in > 0):
         return None
     tp = px_in * (1 + ex.tp) if ex.tp else math.inf
     sl = px_in * (1 - ex.sl) if ex.sl else -math.inf
-    t_end = p.t[i0] + ex.max_min * 60
+    t_end = t_in + ex.max_min * 60
     hi_prior = px_in
     px_out, reason = p.end_price()
     j = p.n - 1
-    for j in range(i0, p.n):
+    if j0 >= p.n:
+        return Trade(p.pool, min(i0, p.n - 1), p.n - 1, px_in, px_out, reason, px_out / px_in - 1.0,
+                     _net(px_in, px_out, side_in, costs.side(p.liq[-1], p.dex, p.fdv) + costs.stop_extra * costs.mult, costs))
+    for j in range(j0, p.n):
         if p.t[j] >= t_end:
             reason, px_out = "time", p.o[j]  # exit at the first candle after the deadline
             break
@@ -263,10 +268,12 @@ def simulate(p: Pool, i_sig: int, ex: Exit, costs: Costs) -> Trade | None:
         px_out, reason = p.end_price()
     liq_out = p.liq[min(j, p.n - 1)]
     side_out = costs.side(liq_out, p.dex, p.fdv) + (costs.stop_extra * costs.mult if reason in ("stop", "trail", "data_end", "dead") else 0.0)
-    gross = px_out / px_in - 1.0
+    return Trade(p.pool, i0, j, px_in, px_out, reason, px_out / px_in - 1.0, _net(px_in, px_out, side_in, side_out, costs))
+
+
+def _net(px_in: float, px_out: float, side_in: float, side_out: float, costs: Costs) -> float:
     net_frac = (1 - side_in) * (px_out / px_in) * (1 - side_out) - 1.0
-    net_usd = SIZE_USD * net_frac - costs.network_usd * costs.mult
-    return Trade(p.pool, i0, j, px_in, px_out, reason, gross, net_usd)
+    return SIZE_USD * net_frac - costs.network_usd * costs.mult
 
 
 # --------------------------------------------------------------------------- stats
@@ -339,12 +346,19 @@ def simulate_many(p: Pool, i_sig: int, exits: list[Exit], costs: Costs) -> list[
     """Same rules as simulate() for many exits at once (vectorized over the path). Returns
     [(net_usd, reason, exit_index)] in the order of `exits`, or None if no fill is possible."""
     i0 = i_sig + 1
-    if i0 >= p.n or p.t[i0] - p.t[i_sig] > 120 or not (p.o[i0] > 0):
-        return None
     if p.liq[i_sig] == p.liq[i_sig] and p.liq[i_sig] < 100 * SIZE_USD:
         return None  # position would be more than 1% of the pool
-    px_in = p.o[i0]
+    if i0 < p.n and p.t[i0] - p.t[i_sig] <= 120:
+        px_in, t_in = p.o[i0], p.t[i0]
+    else:  # no trade in the next minute: fill at the last quoted price (see simulate)
+        px_in, t_in = p.c[i_sig], p.t[i_sig] + 60
+    if not (px_in > 0):
+        return None
     side_in = costs.side(p.liq[i_sig], p.dex, p.fdv)
+    if i0 >= p.n:
+        px_out, reason = p.end_price()
+        side_out = costs.side(p.liq[-1], p.dex, p.fdv) + costs.stop_extra * costs.mult
+        return [(_net(px_in, px_out, side_in, side_out, costs), reason, p.n - 1)] * len(exits)
     t, o, h, l = p.t[i0:], p.o[i0:], p.h[i0:], p.l[i0:]
     # highest high of candles strictly before each candle (trailing reference), starting at entry price
     prior_hi = np.maximum.accumulate(np.concatenate(([px_in], h[:-1])))
@@ -355,7 +369,7 @@ def simulate_many(p: Pool, i_sig: int, exits: list[Exit], costs: Costs) -> list[
         tp = px_in * (1 + ex.tp) if ex.tp else np.inf
         sl = px_in * (1 - ex.sl) if ex.sl else -np.inf
         stop = np.full(len(t), sl) if not ex.trail else np.maximum(sl, prior_hi * (1 - ex.trail))
-        timed = t >= t[0] + ex.max_min * 60
+        timed = t >= t_in + ex.max_min * 60
         stop_hit = (o <= stop) | (l <= stop)
         tp_hit = h >= tp
         ev = timed | stop_hit | tp_hit
