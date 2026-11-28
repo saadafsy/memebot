@@ -1,5 +1,5 @@
 {
- "utc": "2026-11-28T00:12:23Z",
+ "utc": "2026-11-28T00:29:33Z",
  "procs": {
   "run_collect.py 1 --hours": true,
   "backfill.py": true,
@@ -7,9 +7,9 @@
  },
  "forward": {
   "pools": 1503,
-  "snapshots": 18468,
+  "snapshots": 20792,
   "ohlcv": 0,
-  "snap_age_s": 47,
+  "snap_age_s": 96,
   "done": false
  },
  "early": {
@@ -19,16 +19,16 @@
  },
  "backfill": {
   "pools": 239,
-  "ohlcv": 91
+  "ohlcv": 97
  },
  "pumpportal": {
-  "events": 1140,
-  "last_write_age_s": 3
+  "events": 1233,
+  "last_write_age_s": 48
  },
  "gt": {
-  "interval_s": 19.4,
-  "calls": 243,
-  "n429": 37
+  "interval_s": 20.0,
+  "calls": 303,
+  "n429": 47
  },
  "result": "PASS"
 }
