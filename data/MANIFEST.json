@@ -1,5 +1,5 @@
 {
- "built_utc": "2026-11-28T02:19:35Z",
+ "built_utc": "2026-11-28T02:50:14Z",
  "tables": {
   "forward_pools": {
    "rows": 1503,
@@ -14,8 +14,8 @@
    "sha256": "29e95745e091b4f2"
   },
   "forward_ohlcv_1m": {
-   "rows": 1072,
-   "pools": 153
+   "rows": 1522,
+   "pools": 244
   },
   "backfill_SURVIVORSHIP_BIASED_pools": {
    "rows": 239,
@@ -28,10 +28,10 @@
    "pools": 106
   },
   "pumpportal_events": {
-   "rows": 1732,
+   "rows": 1828,
    "bad_lines": 0,
    "sources": 5,
-   "sha256": "73bd09ebe50236aa"
+   "sha256": "5a9268b971e18555"
   }
  },
  "errors": [],
