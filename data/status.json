@@ -1,15 +1,15 @@
 {
- "utc": "2026-11-28T03:20:20Z",
+ "utc": "2026-11-28T03:28:34Z",
  "procs": {
-  "ohlcv-only --out /tmp/mbdata$": true,
-  "backfill.py": true,
-  "pp_record.py": true
+  "ohlcv-only --out /tmp/mbdata$": false,
+  "backfill.py": false,
+  "pp_record.py": false
  },
  "forward": {
   "pools": 1503,
   "snapshots": 24859,
-  "ohlcv": 345,
-  "snap_age_s": 8626,
+  "ohlcv": 367,
+  "snap_age_s": 9120,
   "done": false
  },
  "early": {
@@ -22,13 +22,13 @@
   "ohlcv": 107
  },
  "pumpportal": {
-  "events": 2005,
-  "last_write_age_s": 38
+  "events": 2035,
+  "last_write_age_s": 71
  },
  "gt": {
-  "interval_s": 17.7,
-  "calls": 865,
-  "n429": 159
+  "interval_s": 20.0,
+  "calls": 892,
+  "n429": 163
  },
- "result": "PASS"
+ "result": "FAIL: ohlcv-only --out /tmp/mbdata$; backfill.py; pp_record.py"
 }
