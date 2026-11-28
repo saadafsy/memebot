@@ -1,5 +1,5 @@
 {
- "utc": "2026-11-28T02:50:16Z",
+ "utc": "2026-11-28T03:20:20Z",
  "procs": {
   "ohlcv-only --out /tmp/mbdata$": true,
   "backfill.py": true,
@@ -8,8 +8,8 @@
  "forward": {
   "pools": 1503,
   "snapshots": 24859,
-  "ohlcv": 244,
-  "snap_age_s": 6822,
+  "ohlcv": 345,
+  "snap_age_s": 8626,
   "done": false
  },
  "early": {
@@ -19,16 +19,16 @@
  },
  "backfill": {
   "pools": 239,
-  "ohlcv": 106
+  "ohlcv": 107
  },
  "pumpportal": {
-  "events": 1872,
-  "last_write_age_s": 17
+  "events": 2005,
+  "last_write_age_s": 38
  },
  "gt": {
-  "interval_s": 8.7,
-  "calls": 740,
-  "n429": 144
+  "interval_s": 17.7,
+  "calls": 865,
+  "n429": 159
  },
  "result": "PASS"
 }
